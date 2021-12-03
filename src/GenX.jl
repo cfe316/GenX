@@ -56,11 +56,10 @@ using RecursiveArrayTools
 using Statistics
 
 # Uncomment if Gurobi or CPLEX active license and installations are there and the user intends to use either of them
-# using CPLEX
-#using Gurobi
+using Gurobi
 #using CPLEX
 #using MOI
-using SCIP
+#using SCIP
 using Clp
 using Cbc
 
@@ -131,6 +130,8 @@ include("model/resources/thermal/thermal.jl")
 include("model/resources/thermal/thermal_commit.jl")
 include("model/resources/thermal/thermal_no_commit.jl")
 
+include("model/resources/thermal_storage/thermal_storage.jl")
+
 include("model/policies/co2_cap.jl")
 include("model/policies/energy_share_requirement.jl")
 include("model/policies/cap_reserve_margin.jl")
@@ -163,6 +164,8 @@ include("write_outputs/write_storagedual.jl")
 include("write_outputs/write_subsidy_revenue.jl")
 include("write_outputs/write_time_weights.jl")
 include("write_outputs/choose_output_dir.jl")
+
+include("write_outputs/write_ts.jl")
 
 include("write_outputs/capacity_reserve_margin/write_capacity_value.jl")
 include("write_outputs/capacity_reserve_margin/write_reserve_margin_revenue.jl")
