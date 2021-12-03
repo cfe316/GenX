@@ -218,6 +218,26 @@ function load_generators_data(setup::Dict, path::AbstractString, inputs_gen::Dic
 			#   thus the overall is MTons/GW, and thus inputs_gen["dfGen"][!,:CO2_per_Start][g] is ton
 		end
 	end
+
+
+	inputs_gen["TS"] = gen_in[gen_in.TS.==1,:R_ID]
+
+	if !isempty(inputs_gen["TS"])
+		ts_in = DataFrame(CSV.File(string(path,sep,"Thermal_storage.csv"), header=true), copycols=true)
+
+		inputs_gen["dfTS"] = ts_in
+		if setup["ParameterScale"] == 1
+			inputs_gen["dfTS"][!,:System_Max_Cap_MW_th] = ts_in[!,:System_Max_Cap_MW_th]/ModelScalingFactor
+			inputs_gen["dfTS"][!,:Cap_Size] = ts_in[!,:Cap_Size]/ModelScalingFactor
+			inputs_gen["dfTS"][!,:Max_Cap_MW_th] = ts_in[!,:Max_Cap_MW_th]/ModelScalingFactor
+			inputs_gen["dfTS"][!,:Fixed_Cost_per_MW_th] = ts_in[!,:Fixed_Cost_per_MW_th]/ModelScalingFactor
+			inputs_gen["dfTS"][!,:Var_OM_Cost_per_MWh_th] = ts_in[!,:Var_OM_Cost_per_MWh_th]/ModelScalingFactor
+			inputs_gen["dfTS"][!,:Fixed_Cost_per_MWh_th] = ts_in[!,:Fixed_Cost_per_MWh_th]/ModelScalingFactor
+
+		end
+		println("Thermal_storage.csv Successfully Read!")
+	end
+
 	println("Generators_data.csv Successfully Read!")
 
 	return inputs_gen
