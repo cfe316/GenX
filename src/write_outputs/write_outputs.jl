@@ -119,6 +119,9 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
 		end
 	end
 
+	if !isempty(inputs["TS"])
+		write_ts(path,sep,inputs,setup,EP)
+	end
 
 	# Output additional variables related inter-period energy transfer via storage
 	if setup["OperationWrapping"] == 1 && !isempty(inputs["STOR_LONG_DURATION"])
