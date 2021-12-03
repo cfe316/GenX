@@ -1,0 +1,2 @@
+region,cluster,Resource,Resource_Type,FUS,R_ID,Zone,Cap_Size,Min_Power,Max_Cap_MW_th,Up_Time,Down_Time,Recirc_Pass,Recirc_Act,Start_Power,Start_Energy,Fixed_Cost_per_MW_th,Var_OM_Cost_per_MWh_th,Min_Cap_MWh_th,Max_Cap_MWh_th,Fixed_Cost_per_MWh_th,Eff_Up,Self_Disch,Eff_Therm
+NENGREST,1,NENGREST_Fusion,fusion,1,59,1,1,0.7,4000,-1,0.1,0.1,0.1,0,0.05,0,5,-1,-1,30,1,0,0.4
