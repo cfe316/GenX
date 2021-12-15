@@ -127,10 +127,6 @@ function thermal_storage(EP::Model, setup::Dict, inputs::Dict)
 	@expression(EP, eCFixed_TS[y in TS], dfTS[dfTS.R_ID.==y,:Fixed_Cost_per_MWh_th][]*vTSCAP[y]) #fixed costs for thermal storage y
 	@expression(EP, eTotalCFixedTS, sum(eCFixed_TS[y] for y in TS))	#total fixed costs for all thermal storage
 	EP[:eObj] += eTotalCFixedTS
-	#thermal storage steam turbine constraints
-	# JAS: TODO ask about this
-	@constraint(EP, cTSGenLimit[y in TS, t=1:T], vCP[y,t] <= vTS[y,t])
-	@constraint(EP, cTSStartUp[y in TS, t=1:T], vCP[y,t] <= vTS[y,t])
 
 	### FUSION CONSTRAINTS ###
 	FUS =  dfTS[dfTS.FUS.>=1,:R_ID]
