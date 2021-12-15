@@ -29,59 +29,69 @@ function thermal_storage(EP::Model, setup::Dict, inputs::Dict)
 	Z = inputs["Z"]     # Number of zones
 
 
-
 	START_SUBPERIODS = inputs["START_SUBPERIODS"]
 	INTERIOR_SUBPERIODS = inputs["INTERIOR_SUBPERIODS"]
-	hours_per_subperiod = inputs["hours_per_subperiod"] #total number of hours per subperiod
+	hours_per_subperiod = inputs["hours_per_subperiod"]
 
 
-	###load thermal storage inputs
+	# Load thermal storage inputs
 	TS = inputs["TS"]
 	dfTS = inputs["dfTS"]
 
 
 	@variables(EP, begin
-	#thermal core variables
+	# Thermal core variables
 	vCP[y in TS, t = 1:T] >= 0 		#thermal core power for resource y at timestep t
 	vCCAP[y in TS] >= 0  			#thermal core capacity for resource y
 
-	#thermal storage variables
+	# Thermal storage variables
 	vTS[y in TS, t = 1:T] >= 0		#thermal storage state of charge for resource y at timestep t
 	vTSCAP[y in TS] >= 0			#thermal storage energy capacity for resource y
 	end)
 
 	### THERMAL CORE CONSTRAINTS ###
-	@constraint(EP, cCPMax[y in TS, t=1:T], vCP[y,t] <= vCCAP[y])	#core power output must be <= installed capacity
-	@constraint(EP, cCCAPMax[y in TS], vCCAP[y] <= dfTS[dfTS.R_ID.==y,:Max_Cap_MW_th][])	#Total installed capacity is less than specified maximum limit
+	# Core power output must be <= installed capacity
+	@constraint(EP, cCPMax[y in TS, t=1:T], vCP[y,t] <= vCCAP[y])
+	# Total installed capacity is less than specified maximum limit
+	@constraint(EP, cCCAPMax[y in TS], vCCAP[y] <= dfTS[dfTS.R_ID.==y,:Max_Cap_MW_th][])
 
-	#variable cost of core operation
-	@expression(EP, eCVar_Core[y in TS, t=1:T], inputs["omega"][t]*dfTS[dfTS.R_ID.==y,:Var_OM_Cost_per_MWh_th][]*vCP[y,t]) 	#variable cost at timestep t for thermal core y
-	@expression(EP, eTotalCVarCoreT[t=1:T], sum(eCVar_Core[y,t] for y in TS))	#variable cost from all thermal cores at timestep t
-	@expression(EP, eTotalCVarCore, sum(eTotalCVarCoreT[t] for t in 1:T))	#total variable cost for all thermal cores
+	# Variable cost of core operation
+	# Variable cost at timestep t for thermal core y
+	@expression(EP, eCVar_Core[y in TS, t=1:T], inputs["omega"][t]*dfTS[dfTS.R_ID.==y,:Var_OM_Cost_per_MWh_th][]*vCP[y,t])
+	# Variable cost from all thermal cores at timestep t)
+	@expression(EP, eTotalCVarCoreT[t=1:T], sum(eCVar_Core[y,t] for y in TS)
+	# Total variable cost for all thermal cores
+	@expression(EP, eTotalCVarCore, sum(eTotalCVarCoreT[t] for t in 1:T))
 	EP[:eObj] += eTotalCVarCore
 
 
-	#core investment costs
-	@expression(EP, eCFixed_Core[y in TS], dfTS[dfTS.R_ID.==y,:Fixed_Cost_per_MW_th][]*vCCAP[y])	#fixed cost for thermal core y
-	@expression(EP, eTotalCFixedCore, sum(eCFixed_Core[y] for y in TS))		#total fixed costs for all thermal cores
+	# Core investment costs
+	# fixed cost for thermal core y
+	@expression(EP, eCFixed_Core[y in TS], dfTS[dfTS.R_ID.==y,:Fixed_Cost_per_MW_th][]*vCCAP[y])
+	# total fixed costs for all thermal cores
+	@expression(EP, eTotalCFixedCore, sum(eCFixed_Core[y] for y in TS))
 	EP[:eObj] += eTotalCFixedCore
 
 	### THERMAL STORAGE CONSTRAINTS ###
-	@constraint(EP, cTSMax[y in TS, t=1:T], vTS[y,t] <= vTSCAP[y])	#storage state of charge must be <= installed capacity
+	# Storage state of charge must be <= installed capacity
+	@constraint(EP, cTSMax[y in TS, t=1:T], vTS[y,t] <= vTSCAP[y])
 
-	@constraint(EP, cTSocBalInterior[t in INTERIOR_SUBPERIODS, y in TS], vTS[y,t] ==			#thermal state of charge balance for interior timesteps: (previous SOC) - (discharge to turbines) - (turbine startup energy use) + (core power output) - (self discharge)
+	# thermal state of charge balance for interior timesteps:
+	# (previous SOC) - (discharge to turbines) - (turbine startup energy use) + (core power output) - (self discharge)
+	@constraint(EP, cTSocBalInterior[t in INTERIOR_SUBPERIODS, y in TS], vTS[y,t] ==
 		vTS[y,t-1]-(1/dfTS[dfTS.R_ID.==y,:Eff_Therm][]*EP[:vP][y,t])
 		-(1/dfTS[dfTS.R_ID.==y,:Eff_Therm][]*dfGen[!,:Start_Fuel_MMBTU_per_MW][y]*dfGen[!,:Cap_Size][y]*EP[:vSTART][y,t])
 		+(dfTS[dfTS.R_ID.==y,:Eff_Up][]*vCP[y,t])-(dfTS[dfTS.R_ID.==y,:Self_Disch][]*vTS[y,t-1]))
 
-	if !(setup["OperationWrapping"] == 1 && setup["LongDurationStorage"] == 1) #thermal SOC balance for start timesteps if LDES is not enabled
+	# Thermal SOC balance for start timesteps if LDES is not enabled
+	if !(setup["OperationWrapping"] == 1 && setup["LongDurationStorage"] == 1)
 		@constraint(EP, cTSoCBalStart[t in START_SUBPERIODS, y in TS], vTS[y,t] ==
 			vTS[y,t+hours_per_subperiod-1]-(1/dfTS[dfTS.R_ID.==y,:Eff_Therm][]*EP[:vP][y,t])
 			-(1/dfTS[dfTS.R_ID.==y,:Eff_Therm][]*dfGen[!,:Start_Fuel_MMBTU_per_MW][y]*dfGen[!,:Cap_Size][y]*EP[:vSTART][y,t])
 			+(dfTS[dfTS.R_ID.==y,:Eff_Up][]*vCP[y,t])-(dfTS[dfTS.R_ID.==y,:Self_Disch][]*vTS[y,t+hours_per_subperiod-1]))
 	end
 
-	#constraints if LDES is active
+	# Constraints if LDES is active
 	if setup["OperationWrapping"] == 1 && setup["LongDurationStorage"] == 1
 
 		REP_PERIOD = inputs["REP_PERIOD"]  # Number of representative periods
@@ -123,23 +133,26 @@ function thermal_storage(EP::Model, setup::Dict, inputs::Dict)
 						vTSOCw[y,r] == vTS[y,hours_per_subperiod*dfPeriodMap[!,:Rep_Period_Index][r]] - vdTSOC[y,dfPeriodMap[!,:Rep_Period_Index][r]])
 	end
 
-	#thermal storage investment costs
-	@expression(EP, eCFixed_TS[y in TS], dfTS[dfTS.R_ID.==y,:Fixed_Cost_per_MWh_th][]*vTSCAP[y]) #fixed costs for thermal storage y
-	@expression(EP, eTotalCFixedTS, sum(eCFixed_TS[y] for y in TS))	#total fixed costs for all thermal storage
+	# Thermal storage investment costs
+	# Fixed costs for thermal storage y
+	@expression(EP, eCFixed_TS[y in TS], dfTS[dfTS.R_ID.==y,:Fixed_Cost_per_MWh_th][]*vTSCAP[y])
+	# Total fixed costs for all thermal storage
+	@expression(EP, eTotalCFixedTS, sum(eCFixed_TS[y] for y in TS))
 	EP[:eObj] += eTotalCFixedTS
 
 	### FUSION CONSTRAINTS ###
 	FUS =  dfTS[dfTS.FUS.>=1,:R_ID]
-	if !isempty(FUS) #use fusion constraints if thermal cores tagged 'FUS' are present
+	# Use fusion constraints if thermal cores tagged 'FUS' are present
+	if !isempty(FUS)
 
-		#UC variables for the fusion core, analogous to standard UC
+		# UC variables for the fusion core, analogous to standard UC
 		@variables(EP, begin
 			vFCOMMIT[y in FUS, t=1:T] >= 0
 			vFSTART[y in FUS, t=1:T] >= 0
 			vFSHUT[y in FUS, t=1:T] >= 0
 		end)
 
-		#upper bounds on core commitment/start/shut
+		# Upper bounds on core commitment/start/shut
 		@constraints(EP, begin
 			[y in FUS, t=1:T], vFCOMMIT[y,t] <= vCCAP[y]/dfTS[dfTS.R_ID.==y,:Cap_Size][]
 			[y in FUS, t=1:T], vFSTART[y,t] <= vCCAP[y]/dfTS[dfTS.R_ID.==y,:Cap_Size][]
@@ -150,49 +163,57 @@ function thermal_storage(EP::Model, setup::Dict, inputs::Dict)
 		@constraints(EP, begin
 			# For Start Hours, links first time step with last time step in subperiod
 			[y in FUS, t in START_SUBPERIODS], vFCOMMIT[y,t] == vFCOMMIT[y,(t+hours_per_subperiod-1)] + vFSTART[y,t] - vFSHUT[y,t]
-			# For all other hours, links commitment state in hour t with commitment state in prior hour + sum of start up and shut down in current hour
+			# For all other hours, links commitment state in hour t with commitment state in
+			# prior hour + sum of start up and shut down in current hour
 			[y in FUS, t in INTERIOR_SUBPERIODS], vFCOMMIT[y,t] == vFCOMMIT[y,t-1] + vFSTART[y,t] - vFSHUT[y,t]
 		end)
 
 
-		#minimum and maximum core power output
+		# Minimum and maximum core power output
 		@constraints(EP, begin
-			# Minimum stable thermal power generated by core y at hour y >= Min power of committed core
+			# Minimum stable thermal power generated by core y at
+			# hour y >= Min power of committed core
 			[y in TS, t=1:T], vCP[y,t] >= dfTS[dfTS.R_ID.==y,:Min_Power][]*dfTS[dfTS.R_ID.==y,:Cap_Size][]*vFCOMMIT[y,t]
 
-			# Maximum thermal power generated by core y at hour y <= Max power of committed core minus power lost from down time at startup
+			# Maximum thermal power generated by core y at hour y <= Max power of committed
+			# core minus power lost from down time at startup
 			[y in TS, t=1:T], vCP[y,t] <= dfTS[dfTS.R_ID.==y,:Cap_Size][]*vFCOMMIT[y,t] - dfTS[dfTS.R_ID.==y,:Down_Time][]*dfTS[dfTS.R_ID.==y,:Cap_Size][]*vFSTART[y,t]
 		end)
 
-		#core max up time. If this parameter != -1, the fusion core must be cycled at least every n hours.
+		# Core max uptime. If this parameter != -1,
+		# the fusion core must be cycled at least every n hours.
 		for y in FUS
 			Up_Time = dfTS[dfTS.R_ID.==y,:Up_Time][]
 
 			if Up_Time >= 0
-				F_Up_Time_HOURS = [] # Set of hours in the summation term of the maximum up time constraint for the first subperiod of each representative period
+				# Set of hours in the summation term of the maximum up time constraint for
+				# the first subperiod of each representative period
+				F_Up_Time_HOURS = []
 				for s in START_SUBPERIODS
 					F_Up_Time_HOURS = union(F_Up_Time_HOURS, (s+1):(s+Up_Time-1))
 				end
 				@constraints(EP, begin
-					# Looks back over interior timesteps, ensures that a core cannot be committed unless it has been started at some point in the previous n timesteps
+					# Looks back over interior timesteps and ensures that a core cannot
+					# be committed unless it has been started at some point in
+					# the previous n timesteps
 					[t in setdiff(INTERIOR_SUBPERIODS,F_Up_Time_HOURS)], vFCOMMIT[y,t] <= sum(vFSTART[y,e] for e=(t+1-dfTS[dfTS.R_ID.==y,:Up_Time][]):t)
 
-					#wraps up-time constraint around period ends
+					# Wraps up-time constraint around period ends
 					[t in F_Up_Time_HOURS], vFCOMMIT[y,t] <= sum(vFSTART[y,e] for e=(t-((t%hours_per_subperiod)-1):t))+sum(vFSTART[y,e] for e=((t+hours_per_subperiod-(t%hours_per_subperiod))-(dfTS[dfTS.R_ID.==y,:Up_Time][]-(t%hours_per_subperiod))+1):(t+hours_per_subperiod-(t%hours_per_subperiod)))
 					[t in START_SUBPERIODS], vFCOMMIT[y,t] <= vFSTART[y,t]+sum(vFSTART[y,e] for e=((t+hours_per_subperiod-1)-(dfTS[dfTS.R_ID.==y,:Up_Time][]-1)+1):(t+hours_per_subperiod-1))
 				end)
 			end
 		end
 
-		#passive and active recirculating power for each fusion generator
-		#passive recirculating power, depending on built capacity
+		# Passive and active recirculating power for each fusion generator
+		# Passive recirculating power, depending on built capacity
 		@expression(EP, ePassiveRecircFus[y in FUS], vCCAP[y]*dfTS[dfTS.R_ID.==y,:Eff_Therm][]*dfTS[dfTS.R_ID.==y,:Recirc_Pass][])
-		#active recirculating power, depending on committed capacity
+		# Active recirculating power, depending on committed capacity
 		@expression(EP, eActiveRecircFus[y in FUS, t=1:T], dfTS[dfTS.R_ID.==y,:Cap_Size][]*vFCOMMIT[y,t]*dfTS[dfTS.R_ID.==y,:Eff_Therm][]*dfTS[dfTS.R_ID.==y,:Recirc_Act][])
-		#startup energy, taken from the grid every time the core starts up
+		# Startup energy, taken from the grid every time the core starts up
 		@expression(EP, eStartEnergyFus[y in FUS, t=1:T], dfTS[dfTS.R_ID.==y,:Cap_Size][]*vFSTART[y,t]*dfTS[dfTS.R_ID.==y,:Eff_Therm][]*dfTS[dfTS.R_ID.==y,:Start_Energy][])
 
-		#total recirculating power from fusion in each zone
+		# Total recirculating power from fusion in each zone
 		@expression(EP, ePowerBalanceRecircFus[t=1:T, z=1:Z],
 			-sum((ePassiveRecircFus[y]+eActiveRecircFus[y,t]+eStartEnergyFus[y,t]) for y in intersect(FUS, dfTS[dfTS[!,:Zone].==z,:][!,:R_ID])))
 
