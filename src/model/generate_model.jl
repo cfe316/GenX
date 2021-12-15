@@ -207,6 +207,11 @@ function generate_model(setup::Dict,inputs::Dict,OPTIMIZER::MOI.OptimizerWithAtt
 		EP = thermal_storage(EP, setup, inputs)
 	end
 
+	# Model constraints, variables, expression related to thermal+storage resources
+	if !isempty(inputs["TS"])
+		EP = thermal_storage(EP, setup, inputs)
+	end
+
 	# Policies
 	# CO2 emissions limits
 	EP = co2_cap(EP, inputs, setup)

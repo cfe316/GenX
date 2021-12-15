@@ -22,6 +22,7 @@ function thermal_storage(EP::Model, setup::Dict, inputs::Dict)
 
 	println("Thermal Storage Module")
 
+	#load model inputs
 	dfGen = inputs["dfGen"]
 
 	G = inputs["G"]     # Number of resources (generators, storage, DR, and DERs)
@@ -29,12 +30,12 @@ function thermal_storage(EP::Model, setup::Dict, inputs::Dict)
 	Z = inputs["Z"]     # Number of zones
 
 
+	# Load thermal storage inputs
 	START_SUBPERIODS = inputs["START_SUBPERIODS"]
 	INTERIOR_SUBPERIODS = inputs["INTERIOR_SUBPERIODS"]
-	hours_per_subperiod = inputs["hours_per_subperiod"]
+	hours_per_subperiod = inputs["hours_per_subperiod"] #total number of hours per subperiod
 
 
-	# Load thermal storage inputs
 	TS = inputs["TS"]
 	dfTS = inputs["dfTS"]
 
@@ -167,7 +168,6 @@ function thermal_storage(EP::Model, setup::Dict, inputs::Dict)
 			# prior hour + sum of start up and shut down in current hour
 			[y in FUS, t in INTERIOR_SUBPERIODS], vFCOMMIT[y,t] == vFCOMMIT[y,t-1] + vFSTART[y,t] - vFSHUT[y,t]
 		end)
-
 
 		# Minimum and maximum core power output
 		@constraints(EP, begin
