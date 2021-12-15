@@ -137,7 +137,7 @@ function generate_model(setup::Dict,inputs::Dict,OPTIMIZER::MOI.OptimizerWithAtt
 	else
 		EP = investment_discharge(EP, inputs, setup["MinCapReq"])
 	end
-	
+
 ##Dev
 
 	if setup["UCommit"] > 0
@@ -155,7 +155,7 @@ function generate_model(setup::Dict,inputs::Dict,OPTIMIZER::MOI.OptimizerWithAtt
 		else
 			EP = transmission(EP, inputs, setup["UCommit"], setup["NetworkExpansion"], setup["CapacityReserveMargin"])
 		end
-		
+
 ##Dev
 	end
 
@@ -174,12 +174,12 @@ function generate_model(setup::Dict,inputs::Dict,OPTIMIZER::MOI.OptimizerWithAtt
 	# Model constraints, variables, expression related to energy storage modeling
 	if !isempty(inputs["STOR_ALL"])
 ##dev_ddp
-		if setup["MultiStage"] > 0 
+		if setup["MultiStage"] > 0
 			EP = storage_multi_stage(EP, inputs, setup["Reserves"], setup["OperationWrapping"], setup["LongDurationStorage"], setup["MultiStageSettingsDict"])
 		else
 			EP = storage(EP, inputs, setup["Reserves"], setup["OperationWrapping"], setup["LongDurationStorage"], setup["EnergyShareRequirement"], setup["CapacityReserveMargin"], setup["StorageLosses"])
 		end
-		
+
 ##Dev
 	end
 
@@ -200,6 +200,11 @@ function generate_model(setup::Dict,inputs::Dict,OPTIMIZER::MOI.OptimizerWithAtt
 	# Model constraints, variables, expression related to thermal resource technologies
 	if !isempty(inputs["THERM_ALL"])
 		EP = thermal(EP, inputs, setup["UCommit"], setup["Reserves"], setup["CapacityReserveMargin"])
+	end
+
+	# Model constraints, variables, expression related to thermal+storage resources
+	if !isempty(inputs["TS"])
+		EP = thermal_storage(EP, setup, inputs)
 	end
 
 	# Model constraints, variables, expression related to thermal+storage resources
