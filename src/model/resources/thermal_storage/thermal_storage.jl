@@ -66,7 +66,7 @@ function thermal_storage(EP::Model, inputs::Dict)
 	# Variable cost at timestep t for thermal core y
 	@expression(EP, eCVar_Core[y in TS, t=1:T], inputs["omega"][t]*dfTS[dfTS.R_ID.==y,:Var_OM_Cost_per_MWh_th][]*vCP[y,t])
 	# Variable cost from all thermal cores at timestep t)
-	@expression(EP, eTotalCVarCoreT[t=1:T], sum(eCVar_Core[y,t] for y in TS)
+	@expression(EP, eTotalCVarCoreT[t=1:T], sum(eCVar_Core[y,t] for y in TS))
 	# Total variable cost for all thermal cores
 	@expression(EP, eTotalCVarCore, sum(eTotalCVarCoreT[t] for t in 1:T))
 	EP[:eObj] += eTotalCVarCore
