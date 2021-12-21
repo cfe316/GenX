@@ -50,14 +50,10 @@ function thermal_storage(EP::Model, inputs::Dict)
 	end)
 
 	### THERMAL CORE CONSTRAINTS ###
-	# Core power output must be <= installed capacity
-	@constraint(EP, cCPMax[y in TS, t=1:T], vCP[y,t] <= vCCAP[y])
-	for y in TS
-		# Total installed capacity is less than specified maximum limit
-		if dfTS[dfTS.R_ID.==y,:Max_Cap_MW_th][] >= 0
-			@constraint(EP, cCCAPMax[y], vCCAP[y] <= dfTS[dfTS.R_ID.==y,:Max_Cap_MW_th][])
-		end
-	end
+	# Core power output must be <= installed capacity, including hourly capacity factors
+	@constraint(EP, cCPMax[y in TS, t=1:T], vCP[y,t] <= vCCAP[y]*inputs["pP_Max"][y,t])
+	# Total installed capacity is less than specified maximum limit
+	@constraint(EP, cCCAPMax[y in intersect(dfTS[dfTS.Max_Cap_MW_th.>0,:R_ID], TS)], vCCAP[y] <= dfTS[dfTS.R_ID.==y,:Max_Cap_MW_th][])
 	#System-wide installed capacity is less than a specified maximum limit
 	if dfTS[1,:System_Max_Cap_MW_th] >= 0
 		@constraint(EP, cCSystemMax, sum(vCCAP[y] for y in TS) <= dfTS[1,:System_Max_Cap_MW_th])
@@ -150,6 +146,13 @@ function thermal_storage(EP::Model, inputs::Dict)
 	# Total fixed costs for all thermal storage
 	@expression(EP, eTotalCFixedTS, sum(eCFixed_TS[y] for y in TS))
 	EP[:eObj] += eTotalCFixedTS
+
+	# Parameter Fixing Constraints
+	# Fixed ratio of generator capacity to core net electric power
+	@constraint(EP, cCPRat[y in intersect(dfTS[dfTS.Generator_Core_Power_Ratio.>0,:R_ID], TS)], vCCAP[y]*dfTS[dfTS.R_ID.==y,:Eff_Therm][]*(1-dfTS[dfTS.R_ID.==y,:Recirc_Pass][]-dfTS[dfTS.R_ID.==y,:Recirc_Act][])
+	 																							== EP[:vCAP][y]/dfTS[dfTS.R_ID.==y,:Generator_Core_Power_Ratio][])
+	# Fixed storage duration
+	@constraint(EP, cTSDur[y in intersect(dfTS[dfTS.Duration.>0,:R_ID], TS)], vTSCAP[y] == dfTS[dfTS.R_ID.==y,:Duration][]*vCCAP[y])																						
 
 	### FUSION CONSTRAINTS ###
 	FUS =  dfTS[dfTS.FUS.>=1,:R_ID]
