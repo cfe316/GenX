@@ -56,7 +56,7 @@ function thermal_storage(EP::Model, inputs::Dict)
 	@constraint(EP, cCCAPMax[y in intersect(dfTS[dfTS.Max_Cap_MW_th.>0,:R_ID], TS)], vCCAP[y] <= dfTS[dfTS.R_ID.==y,:Max_Cap_MW_th][])
 	#System-wide installed capacity is less than a specified maximum limit
 	if dfTS[1,:System_Max_Cap_MW_th] >= 0
-		@constraint(EP, cCSystemMax, sum(vCCAP[y] for y in TS) <= dfTS[1,:System_Max_Cap_MW_th])
+		@constraint(EP, cCSystemTot, sum(vCCAP[y] for y in TS) == dfTS[1,:System_Max_Cap_MW_th])
 	end
 
 
@@ -152,7 +152,7 @@ function thermal_storage(EP::Model, inputs::Dict)
 	@constraint(EP, cCPRat[y in intersect(dfTS[dfTS.Generator_Core_Power_Ratio.>0,:R_ID], TS)], vCCAP[y]*dfTS[dfTS.R_ID.==y,:Eff_Therm][]*(1-dfTS[dfTS.R_ID.==y,:Recirc_Pass][]-dfTS[dfTS.R_ID.==y,:Recirc_Act][])
 	 																							== EP[:vCAP][y]/dfTS[dfTS.R_ID.==y,:Generator_Core_Power_Ratio][])
 	# Fixed storage duration
-	@constraint(EP, cTSDur[y in intersect(dfTS[dfTS.Duration.>0,:R_ID], TS)], vTSCAP[y] == dfTS[dfTS.R_ID.==y,:Duration][]*vCCAP[y])																						
+	@constraint(EP, cTSDur[y in intersect(dfTS[dfTS.Duration.>0,:R_ID], TS)], vTSCAP[y] == dfTS[dfTS.R_ID.==y,:Duration][]*vCCAP[y])
 
 	### FUSION CONSTRAINTS ###
 	FUS =  dfTS[dfTS.FUS.>=1,:R_ID]
@@ -165,6 +165,16 @@ function thermal_storage(EP::Model, inputs::Dict)
 			vFSTART[y in FUS, t=1:T] >= 0
 			vFSHUT[y in FUS, t=1:T] >= 0
 		end)
+
+		#Declare core integer/binary variables if Integer_Commit is set to 1
+		for y in FUS
+			if dfTS[dfTS.R_ID.==y,:Integer_Commit][] == 1
+				set_integer.(vFCOMMIT[y,:])
+				set_integer.(vFSTART[y,:])
+				set_integer.(vFSHUT[y,:])
+				set_integer.(vCCAP[y,:])
+			end
+		end
 
 		# Upper bounds on core commitment/start/shut
 		@constraints(EP, begin
