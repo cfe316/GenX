@@ -149,8 +149,9 @@ function thermal_storage(EP::Model, inputs::Dict)
 
 	# Parameter Fixing Constraints
 	# Fixed ratio of generator capacity to core net electric power
-	@constraint(EP, cCPRat[y in intersect(dfTS[dfTS.Generator_Core_Power_Ratio.>0,:R_ID], TS)], vCCAP[y]*dfTS[dfTS.R_ID.==y,:Eff_Therm][]*(1-dfTS[dfTS.R_ID.==y,:Recirc_Pass][]-dfTS[dfTS.R_ID.==y,:Recirc_Act][])
-	 																							== EP[:vCAP][y]/dfTS[dfTS.R_ID.==y,:Generator_Core_Power_Ratio][])
+	@constraint(EP, cCPRat[y in intersect(dfTS[dfTS.Generator_Core_Power_Ratio.>0,:R_ID], TS)],
+				vCCAP[y]*dfTS[dfTS.R_ID.==y,:Eff_Therm][]*(1-dfTS[dfTS.R_ID.==y,:Recirc_Pass][]-dfTS[dfTS.R_ID.==y,:Recirc_Act][])
+				 == EP[:vCAP][y]*dfGen[!,:Cap_Size][y]/dfTS[dfTS.R_ID.==y,:Generator_Core_Power_Ratio][])
 	# Fixed storage duration
 	@constraint(EP, cTSDur[y in intersect(dfTS[dfTS.Duration.>0,:R_ID], TS)], vTSCAP[y] == dfTS[dfTS.R_ID.==y,:Duration][]*vCCAP[y])
 
@@ -172,7 +173,7 @@ function thermal_storage(EP::Model, inputs::Dict)
 				set_integer.(vFCOMMIT[y,:])
 				set_integer.(vFSTART[y,:])
 				set_integer.(vFSHUT[y,:])
-				set_integer.(vCCAP[y,:])
+				set_integer.(vCCAP[y])
 			end
 		end
 

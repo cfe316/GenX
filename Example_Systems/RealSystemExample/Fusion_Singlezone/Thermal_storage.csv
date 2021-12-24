@@ -1,2 +1,2 @@
 System_Max_Cap_MW_th,region,cluster,Resource,Resource_Type,FUS,R_ID,Zone,Cap_Size,Integer_Commit,Max_Starts,Min_Power,Max_Cap_MW_th,Max_Up,Down_Time,Recirc_Pass,Recirc_Act,Start_Power,Start_Energy,Fixed_Cost_per_MW_th,Var_OM_Cost_per_MWh_th,Generator_Core_Power_Ratio,LDS,Fixed_Cost_per_MWh_th,Eff_Up,Eff_Therm,Self_Disch,Duration
-6000,NENGREST,1,NENGREST_Fusion,fusion,1,59,1,1,0,4000,0.7,-1,3,0.1,0.1,0.1,0,0.05,0,5,-1,0,2100,1,0.4,0,-1
+6000,NENGREST,1,NENGREST_Fusion,fusion,1,59,1,600,0,4000,0.7,-1,3,0.1,0.1,0.1,0,0.05,0,5,1.3,0,2100,1,0.4,0,24
