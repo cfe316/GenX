@@ -225,7 +225,7 @@ function load_generators_data(setup::Dict, path::AbstractString, inputs_gen::Dic
 	inputs_gen["TS"] = gen_in[gen_in.TS.==1,:R_ID]
 
 	if !isempty(inputs_gen["TS"])
-		ts_in = DataFrame(CSV.File(string(path,sep,"Thermal_storage.csv"), header=true), copycols=true)
+		ts_in = DataFrame(CSV.File(joinpath(path,"Thermal_storage.csv"), header=true), copycols=true)
 
 		inputs_gen["dfTS"] = ts_in
 		if setup["ParameterScale"] == 1

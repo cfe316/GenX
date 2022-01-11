@@ -15,11 +15,11 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 @doc raw"""
-	write_capacity(path::AbstractString, sep::AbstractString, inputs::Dict, setup::Dict, EP::Model))
+	write_capacity(path::AbstractString, inputs::Dict, setup::Dict, EP::Model))
 
 Function for writing the diferent capacities for the different generation technologies (starting capacities or, existing capacities, retired capacities, and new-built capacities).
 """
-function write_ts(path::AbstractString, sep::AbstractString, inputs::Dict, setup::Dict, EP::Model)
+function write_ts(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
 	# Capacity decisions
 	dfGen = inputs["dfGen"]
 	dfTS = inputs["dfTS"]
@@ -48,7 +48,7 @@ function write_ts(path::AbstractString, sep::AbstractString, inputs::Dict, setup
 		dfCoreCap.CorePowerCap = dfCoreCap.CorePowerCap * ModelScalingFactor
 		dfCoreCap.TSEnergyCap = dfCoreCap.TSEnergyCap * ModelScalingFactor
 	end
-	CSV.write(string(path,sep,"TS_capacity.csv"), dfCoreCap)
+	CSV.write(joinpath(path,"TS_capacity.csv"), dfCoreCap)
 
 	### CORE POWER TIME SERIES ###
 	dfCorePwr = DataFrame(Resource = TSResources, Zone=dfTS[!,:Zone], AnnualSum = Array{Union{Missing,Float32}}(undef, TSG))
@@ -66,15 +66,11 @@ function write_ts(path::AbstractString, sep::AbstractString, inputs::Dict, setup
 	rename!(dfCorePwr,auxNew_Names)
 	total = DataFrame(["Total" 0 sum(dfCorePwr[!,:AnnualSum]) fill(0.0, (1,T))], :auto)
 	for t in 1:T
-		if v"1.3" <= VERSION < v"1.4"
-			total[!,t+3] .= sum(dfCorePwr[!,Symbol("t$t")][1:TSG])
-		elseif v"1.4" <= VERSION < v"1.7"
-			total[:,t+3] .= sum(dfCorePwr[:,Symbol("t$t")][1:TSG])
-		end
+		total[:,t+3] .= sum(dfCorePwr[:,Symbol("t$t")][1:TSG])
 	end
 	rename!(total,auxNew_Names)
 	dfCorePwr = vcat(dfCorePwr, total)
-	CSV.write(string(path,sep,"TSCorePwr.csv"), dftranspose(dfCorePwr, false), writeheader=false)
+	CSV.write(joinpath(path,"TSCorePwr.csv"), dftranspose(dfCorePwr, false), writeheader=false)
 
 
 	### THERMAL SOC TIME SERIES ###
@@ -93,15 +89,11 @@ function write_ts(path::AbstractString, sep::AbstractString, inputs::Dict, setup
 	rename!(dfTSOC,auxNew_Names)
 	total = DataFrame(["Total" 0 sum(dfTSOC[!,:AnnualSum]) fill(0.0, (1,T))], :auto)
 	for t in 1:T
-		if v"1.3" <= VERSION < v"1.4"
-			total[!,t+3] .= sum(dfTSOC[!,Symbol("t$t")][1:TSG])
-		elseif v"1.4" <= VERSION < v"1.7"
-			total[:,t+3] .= sum(dfTSOC[:,Symbol("t$t")][1:TSG])
-		end
+		total[:,t+3] .= sum(dfTSOC[:,Symbol("t$t")][1:TSG])
 	end
 	rename!(total,auxNew_Names)
 	dfTSOC = vcat(dfTSOC, total)
-	CSV.write(string(path,sep,"TS_SOC.csv"), dftranspose(dfTSOC, false), writeheader=false)
+	CSV.write(joinpath(path,"TS_SOC.csv"), dftranspose(dfTSOC, false), writeheader=false)
 
 	return dfCoreCap, dfCorePwr, dfTSOC
 end
