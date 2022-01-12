@@ -209,10 +209,12 @@ function thermal_storage(EP::Model, inputs::Dict)
 
 		for y in FUS
 			#Limit on total core starts per year
-			#if dfTS[dfTS.R_ID.==y,:Max_Starts][] >= 0
-			#	sum(vFSTART[y,t]*inputs["omega"][t] for t in 1:T) <=
-			#	dfTS[dfTS.R_ID.==y,:Max_Starts][]*vCCAP[y]/dfTS[dfTS.R_ID.==y,:Cap_Size][]
-			#end
+			if dfTS[dfTS.R_ID.==y,:Max_Starts][] >= 0
+				@constraints(EP, begin
+					[y in TS, t=1:T], sum(vFSTART[y,t]*inputs["omega"][t] for t in 1:T) <=
+										dfTS[dfTS.R_ID.==y,:Max_Starts][]*vCCAP[y]/dfTS[dfTS.R_ID.==y,:Cap_Size][]
+				end)
+			end
 
 			# Core max uptime. If this parameter != -1,
 			# the fusion core must be cycled at least every n hours.
