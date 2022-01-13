@@ -120,7 +120,7 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
 	end
 
 	if !isempty(inputs["TS"])
-		write_ts(path,inputs,setup,EP)
+		write_thermal_storage(path,inputs,setup,EP)
 	end
 
 	# Output additional variables related inter-period energy transfer via storage

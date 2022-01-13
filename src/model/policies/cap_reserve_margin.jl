@@ -44,6 +44,8 @@ function cap_reserve_margin(EP::Model, inputs::Dict, setup::Dict)
 	VRE = inputs["VRE"]
 	HYDRO_RES = inputs["HYDRO_RES"]
 	# VRE_HYDRO_RES = union(inputs["HYDRO_RES"],inputs["VRE"])
+	TS = inputs["TS"]
+	dfTS = inputs["dfTS"]
 	STOR_ALL = inputs["STOR_ALL"]
 	FLEX = inputs["FLEX"]
 	if setup["CapacityReserveMargin"] > 0
@@ -51,6 +53,11 @@ function cap_reserve_margin(EP::Model, inputs::Dict, setup::Dict)
 			if Z > 1
 				@constraint(EP, cCapacityResMargin[res=1:inputs["NCapacityReserveMargin"], t=1:T],
 				  sum(dfGen[y,Symbol("CapRes_$res")] * EP[:eTotalCap][y] for y in THERM_ALL) # including thermal generator
+				- sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:eTotalCap][y] 
+														- EP[:vP][y,t]  
+														+ dfTS[dfTS.R_ID.==y,:Cap_Size][]*EP[:vFSTART][y,t]*dfTS[dfTS.R_ID.==y,:Eff_Therm][]*dfTS[dfTS.R_ID.==y,:Start_Power][]
+														+ EP[:ePassiveRecircFus][y]
+														+ EP[:eActiveRecircFus][y,t]) for y in TS)
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:vP][y,t] - EP[:vCHARGE][y,t])  for y in STOR_ALL) # including storage
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * EP[:eTotalCap][y] * inputs["pP_Max"][y,t]  for y in VRE ) # including VRE
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * EP[:vP][y,t]  for y in HYDRO_RES ) # including HYDRO_RES
@@ -62,6 +69,11 @@ function cap_reserve_margin(EP::Model, inputs::Dict, setup::Dict)
 			else # No vFlow in single-zone models
 				@constraint(EP, cCapacityResMargin[res=1:inputs["NCapacityReserveMargin"], t=1:T],
 				  sum(dfGen[y,Symbol("CapRes_$res")] * EP[:eTotalCap][y] for y in THERM_ALL) # including thermal generator
+				- sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:eTotalCap][y] 
+				  										- EP[:vP][y,t]  
+				  										+ dfTS[dfTS.R_ID.==y,:Cap_Size][]*EP[:vFSTART][y,t]*dfTS[dfTS.R_ID.==y,:Eff_Therm][]*dfTS[dfTS.R_ID.==y,:Start_Power][]
+				 										+ EP[:ePassiveRecircFus][y]
+				  										+ EP[:eActiveRecircFus][y,t]) for y in TS)
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:vP][y,t] - EP[:vCHARGE][y,t])  for y in STOR_ALL) # including storage
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * EP[:eTotalCap][y] * inputs["pP_Max"][y,t]  for y in VRE ) # including VRE
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * EP[:vP][y,t]  for y in HYDRO_RES ) # including HYDRO_RES
@@ -74,6 +86,11 @@ function cap_reserve_margin(EP::Model, inputs::Dict, setup::Dict)
 			if Z > 1
 				@constraint(EP, cCapacityResMargin[res=1:inputs["NCapacityReserveMargin"], t=1:T],
 				  sum(dfGen[y,Symbol("CapRes_$res")] * EP[:eTotalCap][y] for y in THERM_ALL) # including thermal generator
+				- sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:eTotalCap][y] 
+				  										- EP[:vP][y,t]  
+				  										+ dfTS[dfTS.R_ID.==y,:Cap_Size][]*EP[:vFSTART][y,t]*dfTS[dfTS.R_ID.==y,:Eff_Therm][]*dfTS[dfTS.R_ID.==y,:Start_Power][]
+				 										+ EP[:ePassiveRecircFus][y]
+				  										+ EP[:eActiveRecircFus][y,t]) for y in TS)
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:vP][y,t] - EP[:vCHARGE][y,t])  for y in STOR_ALL) # including storage
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * EP[:eTotalCap][y] * inputs["pP_Max"][y,t]  for y in VRE ) # including VRE
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * EP[:vP][y,t]  for y in HYDRO_RES ) # including HYDRO_RES
@@ -84,7 +101,12 @@ function cap_reserve_margin(EP::Model, inputs::Dict, setup::Dict)
 			else # No vFlow in single-zone models
 				@constraint(EP, cCapacityResMargin[res=1:inputs["NCapacityReserveMargin"], t=1:T],
 				  sum(dfGen[y,Symbol("CapRes_$res")] * EP[:eTotalCap][y] for y in THERM_ALL) # including thermal generator
-				+ sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:vP][y,t] - EP[:vCHARGE][y,t])  for y in STOR_ALL) # including storage
+				- sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:eTotalCap][y] 
+				  										- EP[:vP][y,t]  
+				  										+ dfTS[dfTS.R_ID.==y,:Cap_Size][]*EP[:vFSTART][y,t]*dfTS[dfTS.R_ID.==y,:Eff_Therm][]*dfTS[dfTS.R_ID.==y,:Start_Power][]
+				 										+ EP[:ePassiveRecircFus][y]
+				  										+ EP[:eActiveRecircFus][y,t]) for y in TS)
+				  + sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:vP][y,t] - EP[:vCHARGE][y,t])  for y in STOR_ALL) # including storage
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * EP[:eTotalCap][y] * inputs["pP_Max"][y,t]  for y in VRE ) # including VRE
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * EP[:vP][y,t]  for y in HYDRO_RES ) # including HYDRO_RES
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:vCHARGE_FLEX][y,t] - EP[:vP][y,t]) for y in FLEX) # including Flexibile load
