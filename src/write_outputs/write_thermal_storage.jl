@@ -19,7 +19,7 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 
 Function for writing the diferent capacities for the different generation technologies (starting capacities or, existing capacities, retired capacities, and new-built capacities).
 """
-function write_ts(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
+function write_thermal_storage(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
 	# Capacity decisions
 	dfGen = inputs["dfGen"]
 	dfTS = inputs["dfTS"]
@@ -95,5 +95,71 @@ function write_ts(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
 	dfTSOC = vcat(dfTSOC, total)
 	CSV.write(joinpath(path,"TS_SOC.csv"), dftranspose(dfTSOC, false), writeheader=false)
 
-	return dfCoreCap, dfCorePwr, dfTSOC
+	### CORE STARTS TIMESERIES ###
+	dfFStart = DataFrame(Resource = TSResources, Zone = dfTS[!,:Zone], Sum = Array{Union{Missing,Float32}}(undef, TSG))
+	start = zeros(TSG,T)
+	for i in TSG
+		start[i,:] = value.(EP[:vFSTART])[dfTS[!,:R_ID][i],:]
+		dfFStart[!,:Sum][i] = sum(start[i,:])
+	end
+	dfFStart = hcat(dfFStart, DataFrame(start, :auto))
+	auxNew_Names=[Symbol("Resource");Symbol("Zone");Symbol("Sum");[Symbol("t$t") for t in 1:T]]
+	rename!(dfFStart,auxNew_Names)
+	total = DataFrame(["Total" 0 sum(dfFStart[!,:Sum]) fill(0.0, (1,T))], :auto)
+	for t in 1:T
+		if v"1.3" <= VERSION < v"1.4"
+			total[!,t+3] .= sum(dfFStart[:,Symbol("t$t")][1:TSG])
+		elseif v"1.5" <= VERSION < v"1.7"
+			total[:,t+3] .= sum(dfFStart[:,Symbol("t$t")][1:TSG])
+		end
+	end
+	rename!(total,auxNew_Names)
+	dfFStart = vcat(dfFStart, total)
+	CSV.write(joinpath(path,"f_start.csv"), dftranspose(dfFStart, false), writeheader=false)
+
+		### CORE SHUTS TIMESERIES ###
+	dfFShut = DataFrame(Resource = TSResources, Zone = dfTS[!,:Zone], Sum = Array{Union{Missing,Float32}}(undef, TSG))
+	shut = zeros(TSG,T)
+	for i in TSG
+		shut[i,:] = value.(EP[:vFSHUT])[dfTS[!,:R_ID][i],:]
+		dfFShut[!,:Sum][i] = sum(shut[i,:])
+	end
+	dfFShut = hcat(dfFShut, DataFrame(shut, :auto))
+	auxNew_Names=[Symbol("Resource");Symbol("Zone");Symbol("Sum");[Symbol("t$t") for t in 1:T]]
+	rename!(dfFShut,auxNew_Names)
+	total = DataFrame(["Total" 0 sum(dfFShut[!,:Sum]) fill(0.0, (1,T))], :auto)
+	for t in 1:T
+		if v"1.3" <= VERSION < v"1.4"
+			total[!,t+3] .= sum(dfFShut[:,Symbol("t$t")][1:TSG])
+		elseif v"1.5" <= VERSION < v"1.7"
+			total[:,t+3] .= sum(dfFShut[:,Symbol("t$t")][1:TSG])
+		end
+	end
+	rename!(total,auxNew_Names)
+	dfFShut = vcat(dfFShut, total)
+	CSV.write(joinpath(path,"f_shut.csv"), dftranspose(dfFShut, false), writeheader=false)
+
+    ### CORE STARTS TIMESERIES ###
+    dfFCommit = DataFrame(Resource = TSResources, Zone = dfTS[!,:Zone], Sum = Array{Union{Missing,Float32}}(undef, TSG))
+    commit = zeros(TSG,T)
+    for i in TSG
+        commit[i,:] = value.(EP[:vFCOMMIT])[dfTS[!,:R_ID][i],:]
+        dfFCommit[!,:Sum][i] = sum(commit[i,:])
+    end
+    dfFCommit = hcat(dfFCommit, DataFrame(commit, :auto))
+    auxNew_Names=[Symbol("Resource");Symbol("Zone");Symbol("Sum");[Symbol("t$t") for t in 1:T]]
+    rename!(dfFCommit,auxNew_Names)
+    total = DataFrame(["Total" 0 sum(dfFCommit[!,:Sum]) fill(0.0, (1,T))], :auto)
+    for t in 1:T
+        if v"1.3" <= VERSION < v"1.4"
+            total[!,t+3] .= sum(dfFCommit[:,Symbol("t$t")][1:TSG])
+        elseif v"1.5" <= VERSION < v"1.7"
+            total[:,t+3] .= sum(dfFCommit[:,Symbol("t$t")][1:TSG])
+        end
+    end
+    rename!(total,auxNew_Names)
+    dfFCommit = vcat(dfFCommit, total)
+    CSV.write(joinpath(path,"f_commit.csv"), dftranspose(dfFCommit, false), writeheader=false)
+
+	return dfCoreCap, dfCorePwr, dfTSOC, dfFStart, dfFShut, dfFCommit
 end
