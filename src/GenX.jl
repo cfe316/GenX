@@ -156,7 +156,7 @@ include("write_outputs/write_subsidy_revenue.jl")
 include("write_outputs/write_time_weights.jl")
 include("write_outputs/choose_output_dir.jl")
 
-include("write_outputs/write_ts.jl")
+include("write_outputs/write_thermal_storage.jl")
 
 include("write_outputs/capacity_reserve_margin/write_capacity_value.jl")
 include("write_outputs/capacity_reserve_margin/write_reserve_margin_revenue.jl")
