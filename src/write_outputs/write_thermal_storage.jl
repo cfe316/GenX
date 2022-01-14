@@ -14,6 +14,48 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+function write_core_behaviors(symbol::Symbol, filename::AbstractString)
+	df = DataFrame(Resource = TSResources, Zone = dfTS[!,:Zone], Sum = Array{Union{Missing,Float32}}(undef, TSG))
+	event = zeros(TSG,T)
+	for i in 1:TSG
+		event[i,:] = value.(EP[symbol])[dfTS[i,:R_ID],:]
+		df[i,:Sum] = sum(event[i,:])
+	end
+	df = hcat(df, DataFrame(event, :auto))
+	auxNew_Names=[:Resource; :Zone; :Sum; [Symbol("t$t") for t in 1:T]]
+	rename!(df,auxNew_Names)
+	total = DataFrame(["Total" 0 sum(df[!,:Sum]) fill(0.0, (1,T))], :auto)
+	for t in 1:T
+		total[:,t+3] .= sum(df[:,Symbol("t$t")][1:TSG])
+	end
+	rename!(total,auxNew_Names)
+	df = vcat(df, total)
+	CSV.write(joinpath(path, filename), dftranspose(df, false), writeheader=false)
+
+	return df
+end
+
+function write_scaled_values(symbol::Symbol, filename::AbstractString)
+	df = DataFrame(Resource = TSResources, Zone=dfTS[!,:Zone], AnnualSum = Array{Union{Missing,Float32}}(undef, TSG))
+	quantity = zeros(TSG,T)
+	for i in 1:TSG
+		quantity[i,:] = value.(EP[symbol][dfTS[i,:R_ID],:]) * msf
+		df[i,:AnnualSum] = sum(inputs["omega"].* quantity[i,:])
+	end
+	df = hcat(df, DataFrame(quantity, :auto))
+	auxNew_Names=[:Resource; :Zone; :AnnualSum; [Symbol("t$t") for t in 1:T]]
+	rename!(df,auxNew_Names)
+	total = DataFrame(["Total" 0 sum(df[!,:AnnualSum]) fill(0.0, (1,T))], :auto)
+	for t in 1:T
+		total[:,t+3] .= sum(df[:,Symbol("t$t")][1:TSG])
+	end
+	rename!(total,auxNew_Names)
+	df = vcat(df, total)
+	CSV.write(joinpath(path, filename), dftranspose(df, false), writeheader=false)
+
+	return df
+end
+
 @doc raw"""
 	write_capacity(path::AbstractString, inputs::Dict, setup::Dict, EP::Model))
 
@@ -28,14 +70,14 @@ function write_thermal_storage(path::AbstractString, inputs::Dict, setup::Dict, 
 
 	TSResources = dfTS[!,:Resource]
 	TSG = length(TSResources)
-	corecappower = zeros(size(TSResources))
+	corecappower = zeros(TSG)
 	for i in 1:TSG
-		corecappower[i] = first(value.(EP[:vCCAP][dfTS[!,:R_ID][i]]))
+		corecappower[i] = first(value.(EP[:vCCAP][dfTS[i,:R_ID]]))
 	end
 
-	corecapenergy = zeros(size(TSResources))
+	corecapenergy = zeros(TSG)
 	for i in 1:TSG
-		corecapenergy[i] = first(value.(EP[:vTSCAP][dfTS[!,:R_ID][i]]))
+		corecapenergy[i] = first(value.(EP[:vTSCAP][dfTS[i,:R_ID]]))
 	end
 
 	dfCoreCap = DataFrame(
@@ -44,122 +86,23 @@ function write_thermal_storage(path::AbstractString, inputs::Dict, setup::Dict, 
 		TSEnergyCap = corecapenergy[:]
 	)
 
-	if setup["ParameterScale"] ==1
-		dfCoreCap.CorePowerCap = dfCoreCap.CorePowerCap * ModelScalingFactor
-		dfCoreCap.TSEnergyCap = dfCoreCap.TSEnergyCap * ModelScalingFactor
-	end
+	# set a single scalar to avoid future branching
+	msf = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
+
+	dfCoreCap.CorePowerCap = dfCoreCap.CorePowerCap * msf
+	dfCoreCap.TSEnergyCap = dfCoreCap.TSEnergyCap * msf
 	CSV.write(joinpath(path,"TS_capacity.csv"), dfCoreCap)
 
 	### CORE POWER TIME SERIES ###
-	dfCorePwr = DataFrame(Resource = TSResources, Zone=dfTS[!,:Zone], AnnualSum = Array{Union{Missing,Float32}}(undef, TSG))
-	P_therm = zeros(TSG,T)
-	for i in 1:TSG
-		if setup["ParameterScale"] ==1
-			P_therm[i,:] = value.(EP[:vCP][dfTS[!,:R_ID][i],:]) * ModelScalingFactor
-		else
-			P_therm[i,:] = value.(EP[:vCP][dfTS[!,:R_ID][i],:])
-		end
-		dfCorePwr[!,:AnnualSum][i] = sum(inputs["omega"].* P_therm[i,:])
-	end
-	dfCorePwr = hcat(dfCorePwr, DataFrame(P_therm, :auto))
-	auxNew_Names=[Symbol("Resource");Symbol("Zone");Symbol("AnnualSum");[Symbol("t$t") for t in 1:T]]
-	rename!(dfCorePwr,auxNew_Names)
-	total = DataFrame(["Total" 0 sum(dfCorePwr[!,:AnnualSum]) fill(0.0, (1,T))], :auto)
-	for t in 1:T
-		total[:,t+3] .= sum(dfCorePwr[:,Symbol("t$t")][1:TSG])
-	end
-	rename!(total,auxNew_Names)
-	dfCorePwr = vcat(dfCorePwr, total)
-	CSV.write(joinpath(path,"TSCorePwr.csv"), dftranspose(dfCorePwr, false), writeheader=false)
-
+	dfCorePwr = write_scaled_values(:vCP, "TSCorePwr.csv")
 
 	### THERMAL SOC TIME SERIES ###
-	dfTSOC = DataFrame(Resource = TSResources, Zone=dfTS[!,:Zone], AnnualSum = Array{Union{Missing,Float32}}(undef, TSG))
-	TSOC = zeros(TSG,T)
-	for i in 1:TSG
-		if setup["ParameterScale"] ==1
-			TSOC[i,:] = value.(EP[:vTS][dfTS[!,:R_ID][i],:]) * ModelScalingFactor
-		else
-			TSOC[i,:] = value.(EP[:vTS][dfTS[!,:R_ID][i],:])
-		end
-		dfTSOC[!,:AnnualSum][i] = sum(inputs["omega"].* TSOC[i,:])
-	end
-	dfTSOC = hcat(dfTSOC, DataFrame(TSOC, :auto))
-	auxNew_Names=[Symbol("Resource");Symbol("Zone");Symbol("AnnualSum");[Symbol("t$t") for t in 1:T]]
-	rename!(dfTSOC,auxNew_Names)
-	total = DataFrame(["Total" 0 sum(dfTSOC[!,:AnnualSum]) fill(0.0, (1,T))], :auto)
-	for t in 1:T
-		total[:,t+3] .= sum(dfTSOC[:,Symbol("t$t")][1:TSG])
-	end
-	rename!(total,auxNew_Names)
-	dfTSOC = vcat(dfTSOC, total)
-	CSV.write(joinpath(path,"TS_SOC.csv"), dftranspose(dfTSOC, false), writeheader=false)
+	dfTSOC = write_scaled_values(:vTS, "TS_SOC.csv")
 
-	### CORE STARTS TIMESERIES ###
-	dfFStart = DataFrame(Resource = TSResources, Zone = dfTS[!,:Zone], Sum = Array{Union{Missing,Float32}}(undef, TSG))
-	start = zeros(TSG,T)
-	for i in TSG
-		start[i,:] = value.(EP[:vFSTART])[dfTS[!,:R_ID][i],:]
-		dfFStart[!,:Sum][i] = sum(start[i,:])
-	end
-	dfFStart = hcat(dfFStart, DataFrame(start, :auto))
-	auxNew_Names=[Symbol("Resource");Symbol("Zone");Symbol("Sum");[Symbol("t$t") for t in 1:T]]
-	rename!(dfFStart,auxNew_Names)
-	total = DataFrame(["Total" 0 sum(dfFStart[!,:Sum]) fill(0.0, (1,T))], :auto)
-	for t in 1:T
-		if v"1.3" <= VERSION < v"1.4"
-			total[!,t+3] .= sum(dfFStart[:,Symbol("t$t")][1:TSG])
-		elseif v"1.5" <= VERSION < v"1.7"
-			total[:,t+3] .= sum(dfFStart[:,Symbol("t$t")][1:TSG])
-		end
-	end
-	rename!(total,auxNew_Names)
-	dfFStart = vcat(dfFStart, total)
-	CSV.write(joinpath(path,"f_start.csv"), dftranspose(dfFStart, false), writeheader=false)
-
-		### CORE SHUTS TIMESERIES ###
-	dfFShut = DataFrame(Resource = TSResources, Zone = dfTS[!,:Zone], Sum = Array{Union{Missing,Float32}}(undef, TSG))
-	shut = zeros(TSG,T)
-	for i in TSG
-		shut[i,:] = value.(EP[:vFSHUT])[dfTS[!,:R_ID][i],:]
-		dfFShut[!,:Sum][i] = sum(shut[i,:])
-	end
-	dfFShut = hcat(dfFShut, DataFrame(shut, :auto))
-	auxNew_Names=[Symbol("Resource");Symbol("Zone");Symbol("Sum");[Symbol("t$t") for t in 1:T]]
-	rename!(dfFShut,auxNew_Names)
-	total = DataFrame(["Total" 0 sum(dfFShut[!,:Sum]) fill(0.0, (1,T))], :auto)
-	for t in 1:T
-		if v"1.3" <= VERSION < v"1.4"
-			total[!,t+3] .= sum(dfFShut[:,Symbol("t$t")][1:TSG])
-		elseif v"1.5" <= VERSION < v"1.7"
-			total[:,t+3] .= sum(dfFShut[:,Symbol("t$t")][1:TSG])
-		end
-	end
-	rename!(total,auxNew_Names)
-	dfFShut = vcat(dfFShut, total)
-	CSV.write(joinpath(path,"f_shut.csv"), dftranspose(dfFShut, false), writeheader=false)
-
-    ### CORE STARTS TIMESERIES ###
-    dfFCommit = DataFrame(Resource = TSResources, Zone = dfTS[!,:Zone], Sum = Array{Union{Missing,Float32}}(undef, TSG))
-    commit = zeros(TSG,T)
-    for i in TSG
-        commit[i,:] = value.(EP[:vFCOMMIT])[dfTS[!,:R_ID][i],:]
-        dfFCommit[!,:Sum][i] = sum(commit[i,:])
-    end
-    dfFCommit = hcat(dfFCommit, DataFrame(commit, :auto))
-    auxNew_Names=[Symbol("Resource");Symbol("Zone");Symbol("Sum");[Symbol("t$t") for t in 1:T]]
-    rename!(dfFCommit,auxNew_Names)
-    total = DataFrame(["Total" 0 sum(dfFCommit[!,:Sum]) fill(0.0, (1,T))], :auto)
-    for t in 1:T
-        if v"1.3" <= VERSION < v"1.4"
-            total[!,t+3] .= sum(dfFCommit[:,Symbol("t$t")][1:TSG])
-        elseif v"1.5" <= VERSION < v"1.7"
-            total[:,t+3] .= sum(dfFCommit[:,Symbol("t$t")][1:TSG])
-        end
-    end
-    rename!(total,auxNew_Names)
-    dfFCommit = vcat(dfFCommit, total)
-    CSV.write(joinpath(path,"f_commit.csv"), dftranspose(dfFCommit, false), writeheader=false)
+	### CORE STARTS, SHUTS, and COMMITS TIMESERIES ###
+	dfFStart = write_core_behaviors(:vFSTART, "f_start.csv")
+	dfFShut = write_core_behaviors(:vFSHUT, "f_shut.csv")
+	dfFCommit = write_core_behaviors(:vFCOMMIT, "f_commit.csv")
 
 	return dfCoreCap, dfCorePwr, dfTSOC, dfFStart, dfFShut, dfFCommit
 end
