@@ -15,16 +15,6 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 @doc raw"""
-	by_rid(rid::Integer, s::Symbol)
-
-	Look up a single value from the thermal storage dataframe by R_ID
-"""
-function by_rid(rid::Integer, s::Symbol)
-	return dfTS[dfTS.R_ID .== rid, symbol][]
-end
-
-
-@doc raw"""
     thermal_storage(EP::Model, inputs::Dict)
 
 """
@@ -48,6 +38,9 @@ function thermal_storage(EP::Model, inputs::Dict)
 	TS = inputs["TS"]
 	dfTS = inputs["dfTS"]
 
+	function by_rid(rid::Integer, sym::Symbol)
+		return dfTS[dfTS.R_ID .== rid, sym][]
+	end
 
 	@variables(EP, begin
 	# Thermal core variables
@@ -67,15 +60,14 @@ function thermal_storage(EP::Model, inputs::Dict)
 	@constraint(EP, cCCAPMax[y in those_with_max_cap], vCCAP[y] <= by_rid(y, :Max_Cap_MW_th))
 	#System-wide installed capacity is less than a specified maximum limit
 	FIRST_ROW = 1
-	if dfTS[first_row, :System_Max_Cap_MW_th] >= 0
+	if dfTS[FIRST_ROW, :System_Max_Cap_MW_th] >= 0
 		@constraint(EP, cCSystemTot, sum(vCCAP[y] for y in TS) == dfTS[FIRST_ROW, :System_Max_Cap_MW_th])
 	end
 
 
 	# Variable cost of core operation
 	# Variable cost at timestep t for thermal core y
-	var_oms = [by_rid(y, :Var_OM_Cost_per_MWh_th) for y in TS]
-	@expression(EP, eCVar_Core[y in TS, t=1:T], inputs["omega"][t] * var_oms[y] * vCP[y,t])
+	@expression(EP, eCVar_Core[y in TS, t=1:T], inputs["omega"][t] * by_rid(y, :Var_OM_Cost_per_MWh_th) * vCP[y,t])
 	# Variable cost from all thermal cores at timestep t)
 	@expression(EP, eTotalCVarCoreT[t=1:T], sum(eCVar_Core[y,t] for y in TS))
 	# Total variable cost for all thermal cores
@@ -96,23 +88,24 @@ function thermal_storage(EP::Model, inputs::Dict)
 
 	# thermal state of charge balance for interior timesteps:
 	# (previous SOC) - (discharge to turbines) - (turbine startup energy use) + (core power output) - (self discharge)
-	@constraint(EP, cTSocBalInterior[t in INTERIOR_SUBPERIODS, y in TS], vTS[y,t] == vTS[y,t-1]
+	@constraint(EP, cTSocBalInterior[t in INTERIOR_SUBPERIODS, y in TS], (
+		vTS[y,t] == vTS[y,t-1]
 		- (1 / by_rid(y, :Eff_Therm) * EP[:vP][y,t])
 		- (1 / by_rid(y,:Eff_Therm) * dfGen[y, :Start_Fuel_MMBTU_per_MW] * dfGen[y,:Cap_Size] * EP[:vSTART][y,t])
 		+ (by_rid(y,:Eff_Up) * vCP[y,t])
-		- (by_rid(y,:Self_Disch) * vTS[y,t-1])
-		)
+		- (by_rid(y,:Self_Disch) * vTS[y,t-1]))
+	)
 
 	# Thermal SOC balance constraints
 	for y in TS
 		#If LDS is not enabled
 		if by_rid(y, :LDS) != 1
-			@constraint(EP, cTSoCBalStart[t in START_SUBPERIODS, y], vTS[y,t] ==
-				vTS[y, t + hours_per_subperiod - 1]
+			@constraint(EP, cTSoCBalStart[t in START_SUBPERIODS, y],(
+			 vTS[y,t] == vTS[y, t + hours_per_subperiod - 1]
 				- (1 / by_rid(y, :Eff_Therm) * EP[:vP][y,t])
-				-(1 / by_rid(y, :Eff_Therm) * dfGen[y, :Start_Fuel_MMBTU_per_MW] * dfGen[y, :Cap_Size] * EP[:vSTART][y,t])
-				+(by_rid(y, :Eff_Up) * vCP[y,t]) - (by_rid(y, :Self_Disch) * vTS[y,t + hours_per_subperiod - 1])
-				)
+				- (1 / by_rid(y, :Eff_Therm) * dfGen[y, :Start_Fuel_MMBTU_per_MW] * dfGen[y, :Cap_Size] * EP[:vSTART][y,t])
+				+ (by_rid(y, :Eff_Up) * vCP[y,t]) - (by_rid(y, :Self_Disch) * vTS[y,t + hours_per_subperiod - 1])
+				))
 
 		#If LDS is enabled
 		else
@@ -130,12 +123,13 @@ function thermal_storage(EP::Model, inputs::Dict)
 			# Build up inventory can be positive or negative
 			@variable(EP, vdTSOC[y, w=1:REP_PERIOD])
 			# Note: tw_min = hours_per_subperiod*(w-1)+1; tw_max = hours_per_subperiod*w
-			@constraint(EP, cThermSoCBalLongDurationStorageStart[w=1:REP_PERIOD, y],
-							vTS[y,hours_per_subperiod * (w - 1) + 1] ==
+			@constraint(EP, cThermSoCBalLongDurationStorageStart[w=1:REP_PERIOD, y], (
+					vTS[y,hours_per_subperiod * (w - 1) + 1] ==
 							   (1 - by_rid(y, :Self_Disch)) * (vTS[y, hours_per_subperiod * w] - vdTSOC[y,w])
 							 - (1 / by_rid(y, :Eff_Therm) * EP[:vP][y, hours_per_subperiod * (w - 1) + 1])
 							 - (1 / by_rid(y, :Eff_Therm) * dfGen[y,:Start_Fuel_MMBTU_per_MW] * dfGen[y,:Cap_Size] * EP[:vSTART][y,hours_per_subperiod * (w - 1) + 1])
-							 + (by_rid(y, :Eff_Up) * vCP[y,hours_per_subperiod * (w - 1) + 1]))
+						 + (by_rid(y, :Eff_Up) * vCP[y,hours_per_subperiod * (w - 1) + 1])
+						 ))
 
 			# Storage at beginning of period w = storage at beginning of period w-1 + storage built up in period w (after n representative periods)
 			## Multiply storage build up term from prior period with corresponding weight
@@ -168,8 +162,8 @@ function thermal_storage(EP::Model, inputs::Dict)
 	# Parameter Fixing Constraints
 	# Fixed ratio of generator capacity to core net electric power
 	@constraint(EP, cCPRat[y in dfTS[dfTS.Generator_Core_Power_Ratio.>0,:R_ID]],
-				vCCAP[y] * by_rid(y,:Eff_Therm) * (1 - by_rid(y,:Recirc_Pass) - by_rid(y,:Recirc_Act))
-				 == EP[:vCAP][y] * dfGen[y,:Cap_Size] / by_rid(y,:Generator_Core_Power_Ratio))
+				vCCAP[y] * by_rid(y,:Eff_Therm) * (1 - by_rid(y,:Recirc_Pass) - by_rid(y,:Recirc_Act)) ==
+				EP[:vCAP][y] * dfGen[y,:Cap_Size] / by_rid(y,:Generator_Core_Power_Ratio))
 	# Fixed storage duration
 	@constraint(EP, cTSDur[y in dfTS[dfTS.Duration.>0,:R_ID]], vTSCAP[y] == by_rid(y,:Duration) * vCCAP[y])
 
@@ -220,8 +214,8 @@ function thermal_storage(EP::Model, inputs::Dict)
 
 			# Maximum thermal power generated by core y at hour y <= Max power of committed
 			# core minus power lost from down time at startup
-			[y in TS, t=1:T], vCP[y,t] <= by_rid(y, :Cap_Size) * vFCOMMIT[y,t]
-			                            - by_rid(y, :Down_Time) * by_rid(y, :Cap_Size) * vFSTART[y,t]
+			[y in TS, t=1:T], vCP[y,t] <= by_rid(y, :Cap_Size) * vFCOMMIT[y,t] -
+			                              by_rid(y, :Down_Time) * by_rid(y, :Cap_Size) * vFSTART[y,t]
 		end)
 
 
