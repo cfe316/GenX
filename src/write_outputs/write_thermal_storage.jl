@@ -14,7 +14,13 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-function write_core_behaviors(symbol::Symbol, filename::AbstractString)
+
+function write_core_behaviors(EP::Model, inputs::Dict, symbol::Symbol, filename::AbstractString)
+	dfTS = inputs["dfTS"]
+	T = inputs["T"]
+	TSResources = dfTS[!,:Resource]
+	TSG = length(TSResources)
+
 	df = DataFrame(Resource = TSResources, Zone = dfTS[!,:Zone], Sum = Array{Union{Missing,Float32}}(undef, TSG))
 	event = zeros(TSG,T)
 	for i in 1:TSG
@@ -30,12 +36,17 @@ function write_core_behaviors(symbol::Symbol, filename::AbstractString)
 	end
 	rename!(total,auxNew_Names)
 	df = vcat(df, total)
-	CSV.write(joinpath(path, filename), dftranspose(df, false), writeheader=false)
+	CSV.write(filename, dftranspose(df, false), writeheader=false)
 
 	return df
-end
+	end
 
-function write_scaled_values(symbol::Symbol, filename::AbstractString)
+function write_scaled_values(EP::Model, inputs::Dict, symbol::Symbol, filename::AbstractString, msf)
+	dfTS = inputs["dfTS"]
+	T = inputs["T"]
+	TSResources = dfTS[!,:Resource]
+	TSG = length(TSResources)
+
 	df = DataFrame(Resource = TSResources, Zone=dfTS[!,:Zone], AnnualSum = Array{Union{Missing,Float32}}(undef, TSG))
 	quantity = zeros(TSG,T)
 	for i in 1:TSG
@@ -51,10 +62,11 @@ function write_scaled_values(symbol::Symbol, filename::AbstractString)
 	end
 	rename!(total,auxNew_Names)
 	df = vcat(df, total)
-	CSV.write(joinpath(path, filename), dftranspose(df, false), writeheader=false)
+	CSV.write(filename, dftranspose(df, false), writeheader=false)
 
 	return df
 end
+
 
 @doc raw"""
 	write_capacity(path::AbstractString, inputs::Dict, setup::Dict, EP::Model))
@@ -94,15 +106,15 @@ function write_thermal_storage(path::AbstractString, inputs::Dict, setup::Dict, 
 	CSV.write(joinpath(path,"TS_capacity.csv"), dfCoreCap)
 
 	### CORE POWER TIME SERIES ###
-	dfCorePwr = write_scaled_values(:vCP, "TSCorePwr.csv")
+	dfCorePwr = write_scaled_values(EP, inputs, :vCP, joinpath(path, "TSCorePwr.csv"), msf)
 
 	### THERMAL SOC TIME SERIES ###
-	dfTSOC = write_scaled_values(:vTS, "TS_SOC.csv")
+	dfTSOC = write_scaled_values(EP, inputs, :vTS, joinpath(path, "TS_SOC.csv"), msf)
 
 	### CORE STARTS, SHUTS, and COMMITS TIMESERIES ###
-	dfFStart = write_core_behaviors(:vFSTART, "f_start.csv")
-	dfFShut = write_core_behaviors(:vFSHUT, "f_shut.csv")
-	dfFCommit = write_core_behaviors(:vFCOMMIT, "f_commit.csv")
+	dfFStart = write_core_behaviors(EP, inputs, :vFSTART, joinpath(path, "f_start.csv"))
+	dfFShut = write_core_behaviors(EP, inputs, :vFSHUT, joinpath(path, "f_shut.csv"))
+	dfFCommit = write_core_behaviors(EP, inputs, :vFCOMMIT, joinpath(path, "f_commit.csv"))
 
 	return dfCoreCap, dfCorePwr, dfTSOC, dfFStart, dfFShut, dfFCommit
 end
