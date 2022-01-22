@@ -14,6 +14,58 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+function is_nonzero(df::DataFrame, col::Symbol)::BitVector
+	convert(BitVector, df[!, col] .> 0)::BitVector
+end
+
+function check_thermal_storage_validity(df::DataFrame)
+	ts = is_nonzero(df, :TS)
+	r_id = df[:, :R_ID]
+
+	error_strings = String[]
+
+	c = ts .& .!is_nonzero(df, :THERM)
+	if any(c)
+		e = string("Generators ", r_id[c], ", marked as TS, do not also have THERM=1")
+		push!(error_strings, e)
+	end
+
+	function error_feedback(data::Vector{Int}, col::Symbol)::String
+		string("Generators ", data, ", marked as TS, have ", col, " ≠ 0. ", col, " must be 0.")
+	end
+
+	function check_any_nonzero_with_ts!(error_strings::Vector{String}, df::DataFrame, col::Symbol)
+		check = ts .& is_nonzero(df, col)
+		if any(check)
+			e = error_feedback(r_id[check], col)
+			push!(error_strings, e)
+		end
+	end
+
+	check_any_nonzero_with_ts!(error_strings, df, :STOR)
+	check_any_nonzero_with_ts!(error_strings, df, :FLEX)
+	check_any_nonzero_with_ts!(error_strings, df, :HYDRO)
+	check_any_nonzero_with_ts!(error_strings, df, :VRE)
+	check_any_nonzero_with_ts!(error_strings, df, :LDS)
+	check_any_nonzero_with_ts!(error_strings, df, :MUST_RUN)
+
+	return error_strings
+end
+
+function summarize_errors(error_strings::Vector{String})
+	if !isempty(error_strings)
+		println(length(error_strings), " problem(s) in the configuration of the generators:")
+		for es in error_strings
+			println(es)
+		end
+		error("There were errors in the configuration of the generators.")
+	end
+end
+
+function check_generators_validity(df::DataFrame)
+end
+
+
 @doc raw"""
 	load_generators_data(setup::Dict, path::AbstractString, inputs_gen::Dict, fuel_costs::Dict, fuel_CO2::Dict)
 
@@ -109,7 +161,7 @@ function load_generators_data(setup::Dict, path::AbstractString, inputs_gen::Dic
 	inputs_gen["R_ZONES"] = zones
 	inputs_gen["RESOURCE_ZONES"] = inputs_gen["RESOURCES"] .* "_z" .* string.(zones)
 
-	if setup["ParameterScale"] ==1  # Parameter scaling turned on - adjust values of subset of parameter values
+	if setup["ParameterScale"] ==1	# Parameter scaling turned on - adjust values of subset of parameter values
 
 		# The existing capacity of a power plant in megawatts
 		inputs_gen["dfGen"][!,:Existing_Charge_Cap_MW] = gen_in[!,:Existing_Charge_Cap_MW]/ModelScalingFactor # Convert to GW
@@ -174,7 +226,7 @@ function load_generators_data(setup::Dict, path::AbstractString, inputs_gen::Dic
 
 # Dharik - Done, we have scaled fuel costs above so any parameters on per MMBtu do not need to be scaled
 	if setup["UCommit"]>=1
-		if setup["ParameterScale"] ==1  # Parameter scaling turned on - adjust values of subset of parameter values
+		if setup["ParameterScale"] ==1	# Parameter scaling turned on - adjust values of subset of parameter values
 			# Cost per MW of nameplate capacity to start a generator
 			inputs_gen["dfGen"][!,:Start_Cost_per_MW] = gen_in[!,:Start_Cost_per_MW]/ModelScalingFactor # Convert to $ million/GW with objective function in millions
 		end
@@ -213,16 +265,20 @@ function load_generators_data(setup::Dict, path::AbstractString, inputs_gen::Dic
 				inputs_gen["dfGen"][!,:CO2_per_Start][g] = inputs_gen["dfGen"][!,:CO2_per_Start][g] * ModelScalingFactor
 			end
 			# Setup[ParameterScale] =1, inputs_gen["dfGen"][!,:Cap_Size][g] is GW, fuel_CO2[fuel_type[g]] is ktons/MMBTU, start_fuel is MMBTU/MW,
-			#   thus the overall is MTons/GW, and thus inputs_gen["dfGen"][!,:CO2_per_Start][g] is Mton, to get kton, change we need to multiply 1000
+			#	thus the overall is MTons/GW, and thus inputs_gen["dfGen"][!,:CO2_per_Start][g] is Mton, to get kton, change we need to multiply 1000
 			# Setup[ParameterScale] =0, inputs_gen["dfGen"][!,:Cap_Size][g] is MW, fuel_CO2[fuel_type[g]] is tons/MMBTU, start_fuel is MMBTU/MW,
-			#   thus the overall is MTons/GW, and thus inputs_gen["dfGen"][!,:CO2_per_Start][g] is ton
+			#	thus the overall is MTons/GW, and thus inputs_gen["dfGen"][!,:CO2_per_Start][g] is ton
 		end
 	end
 
+	error_strings = String[]
 
 	inputs_gen["TS"] = gen_in[gen_in.TS.==1,:R_ID]
 
 	if !isempty(inputs_gen["TS"])
+		thermal_storage_errors = check_thermal_storage_validity(gen_in)
+		append!(error_strings, thermal_storage_errors)
+
 		ts_in = DataFrame(CSV.File(joinpath(path,"Thermal_storage.csv"), header=true), copycols=true)
 
 		if setup["ParameterScale"] == 1
@@ -232,12 +288,13 @@ function load_generators_data(setup::Dict, path::AbstractString, inputs_gen::Dic
 								:Fixed_Cost_per_MW_th,
 								:Var_OM_Cost_per_MWh_th,
 								:Fixed_Cost_per_MWh_th]
-			ts_in[!, columns_to_scale] ./=  ModelScalingFactor
+			ts_in[!, columns_to_scale] ./=	ModelScalingFactor
 		end
 		inputs_gen["dfTS"] = ts_in
 		println("Thermal_storage.csv Successfully Read!")
 	end
 
+	summarize_errors(error_strings)
 	println("Generators_data.csv Successfully Read!")
 
 	return inputs_gen
