@@ -264,7 +264,7 @@ function thermal_storage(EP::Model, inputs::Dict)
 
 		# Total recirculating power from fusion in each zone
 		@expression(EP, ePowerBalanceRecircFus[t=1:T, z=1:Z],
-			-sum((ePassiveRecircFus[y]+eActiveRecircFus[y,t]+eStartEnergyFus[y,t]) for y in intersect(FUS, dfTS[dfTS[!,:Zone].==z,:][!,:R_ID])))
+			-sum((ePassiveRecircFus[y]+eActiveRecircFus[y,t]+eStartEnergyFus[y,t]) for y in intersect(FUS, dfTS[dfTS[!,:Zone].==z,:R_ID])))
 
 		EP[:ePowerBalance] += ePowerBalanceRecircFus
 	end
