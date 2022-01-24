@@ -46,7 +46,6 @@ function check_thermal_storage_validity(df::DataFrame)
 	check_any_nonzero_with_ts!(error_strings, df, :FLEX)
 	check_any_nonzero_with_ts!(error_strings, df, :HYDRO)
 	check_any_nonzero_with_ts!(error_strings, df, :VRE)
-	check_any_nonzero_with_ts!(error_strings, df, :LDS)
 	check_any_nonzero_with_ts!(error_strings, df, :MUST_RUN)
 
 	return error_strings
