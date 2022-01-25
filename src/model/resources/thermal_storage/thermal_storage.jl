@@ -225,10 +225,9 @@ function thermal_storage(EP::Model, inputs::Dict)
 		for y in FUS
 			#Limit on total core starts per year
 			if by_rid(y, :Max_Starts) >= 0
-				@constraints(EP, begin
-					[t=1:T], sum(vFSTART[y,t]*inputs["omega"][t] for t in 1:T) <=
-										by_rid(y, :Max_Starts) * vCCAP[y] / by_rid(y,:Cap_Size)
-				end)
+				@constraint(EP, sum(vFSTART[y,t]*inputs["omega"][t] for t in 1:T) <=
+								by_rid(y, :Max_Starts) * vCCAP[y] / by_rid(y,:Cap_Size)
+				)
 			end
 
 			# Core max uptime. If this parameter > 0,
