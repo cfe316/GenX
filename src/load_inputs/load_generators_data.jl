@@ -272,9 +272,22 @@ function load_generators_data(setup::Dict, path::AbstractString, inputs_gen::Dic
 		end
 	end
 
+	load_thermal_storage_data!(setup, path, inputs_gen, gen_in)
+	println("Generators_data.csv Successfully Read!")
+
+	return inputs_gen
+end
+
+@doc raw"""
+	load_thermal_storage_data(setup::Dict, path::AbstractString, inputs_gen::Dict, gen_in::DataFrame)
+
+Function for reading input parameters related to resources that combine thermal generation and storage.
+If there are no TS columns, TS is a vector of length 0 and dfTS is an empty Dataframe.
+"""
+function load_thermal_storage_data!(setup::Dict, path::AbstractString, inputs_gen::Dict, gen_in::DataFrame)
 	error_strings = String[]
 
-	inputs_gen["TS"] = gen_in[gen_in.TS.==1,:R_ID]
+	inputs_gen["TS"] = "TS" in names(gen_in) ? gen_in[gen_in.TS.==1,:R_ID] : Int[]
 
 	if !isempty(inputs_gen["TS"])
 		thermal_storage_errors = check_thermal_storage_validity(gen_in)
@@ -289,14 +302,13 @@ function load_generators_data(setup::Dict, path::AbstractString, inputs_gen::Dic
 								:Fixed_Cost_per_MW_th,
 								:Var_OM_Cost_per_MWh_th,
 								:Fixed_Cost_per_MWh_th]
-			ts_in[!, columns_to_scale] ./=	ModelScalingFactor
+			ts_in[!, columns_to_scale] ./= ModelScalingFactor
 		end
 		inputs_gen["dfTS"] = ts_in
 		println("Thermal_storage.csv Successfully Read!")
+	else
+		inputs_gen["dfTS"] = DataFrame()
 	end
 
 	summarize_errors(error_strings)
-	println("Generators_data.csv Successfully Read!")
-
-	return inputs_gen
 end
