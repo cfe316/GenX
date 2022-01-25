@@ -97,59 +97,57 @@ function thermal_storage(EP::Model, inputs::Dict)
 	)
 
 	# Thermal SOC balance constraints
-	for y in TS
-		#If LDS is not enabled
-		if dfGen[y, :LDS] != 1
-			@constraint(EP, cTSoCBalStart[t in START_SUBPERIODS, y],(
-			 vTS[y,t] == vTS[y, t + hours_per_subperiod - 1]
-				- (1 / dfGen[y, :Eff_Down] * EP[:vP][y,t])
-				- (1 / dfGen[y, :Eff_Down] * dfGen[y, :Start_Fuel_MMBTU_per_MW] * dfGen[y, :Cap_Size] * EP[:vSTART][y,t])
-				+ (dfGen[y, :Eff_Up] * vCP[y,t]) - (dfGen[y, :Self_Disch] * vTS[y,t + hours_per_subperiod - 1])
-				))
+	TS_and_LDS = intersect(TS, dfGen[dfGen.LDS.==1,:R_ID])
+	TS_and_nonLDS = intersect(TS, dfGen[dfGen.LDS.!=1,:R_ID])
 
-		#If LDS is enabled
-		else
-			REP_PERIOD = inputs["REP_PERIOD"]  # Number of representative periods
+	@constraint(EP, cTSoCBalStart[t in START_SUBPERIODS, y in TS_and_nonLDS],(
+	 vTS[y,t] == vTS[y, t + hours_per_subperiod - 1]
+		- (1 / dfGen[y, :Eff_Down] * EP[:vP][y,t])
+		- (1 / dfGen[y, :Eff_Down] * dfGen[y, :Start_Fuel_MMBTU_per_MW] * dfGen[y, :Cap_Size] * EP[:vSTART][y,t])
+		+ (dfGen[y, :Eff_Up] * vCP[y,t]) - (dfGen[y, :Self_Disch] * vTS[y,t + hours_per_subperiod - 1])
+		))
 
-			dfPeriodMap = inputs["Period_Map"] # Dataframe that maps modeled periods to representative periods
-			NPeriods = size(inputs["Period_Map"])[1] # Number of modeled periods
+	if !isempty(TS_and_LDS)
+		REP_PERIOD = inputs["REP_PERIOD"]  # Number of representative periods
 
-			MODELED_PERIODS_INDEX = 1:NPeriods
-			REP_PERIODS_INDEX = MODELED_PERIODS_INDEX[dfPeriodMap[!,:Rep_Period] .== MODELED_PERIODS_INDEX]
+		dfPeriodMap = inputs["Period_Map"] # Dataframe that maps modeled periods to representative periods
+		NPeriods = nrow(inputs["Period_Map"]) # Number of modeled periods
 
-			@variable(EP, vTSOCw[y, n in MODELED_PERIODS_INDEX] >= 0)
+		MODELED_PERIODS_INDEX = 1:NPeriods
+		REP_PERIODS_INDEX = MODELED_PERIODS_INDEX[dfPeriodMap[!,:Rep_Period] .== MODELED_PERIODS_INDEX]
 
-			# Build up in storage inventory over each representative period w
-			# Build up inventory can be positive or negative
-			@variable(EP, vdTSOC[y, w=1:REP_PERIOD])
-			# Note: tw_min = hours_per_subperiod*(w-1)+1; tw_max = hours_per_subperiod*w
-			@constraint(EP, cThermSoCBalLongDurationStorageStart[w=1:REP_PERIOD, y], (
-					vTS[y,hours_per_subperiod * (w - 1) + 1] ==
-							   (1 - dfGen[y, :Self_Disch]) * (vTS[y, hours_per_subperiod * w] - vdTSOC[y,w])
-							 - (1 / df_Gen[y, :Eff_Down] * EP[:vP][y, hours_per_subperiod * (w - 1) + 1])
-							 - (1 / df_Gen[y, :Eff_Down] * dfGen[y,:Start_Fuel_MMBTU_per_MW] * dfGen[y,:Cap_Size] * EP[:vSTART][y,hours_per_subperiod * (w - 1) + 1])
-						 + (dfGen[y, :Eff_Up] * vCP[y,hours_per_subperiod * (w - 1) + 1])
-						 ))
+		@variable(EP, vTSOCw[y in TS_and_LDS, n in MODELED_PERIODS_INDEX] >= 0)
 
-			# Storage at beginning of period w = storage at beginning of period w-1 + storage built up in period w (after n representative periods)
-			## Multiply storage build up term from prior period with corresponding weight
-			@constraint(EP, cThermSoCBalLongDurationStorageInterior[y, r in MODELED_PERIODS_INDEX[1:(end-1)]],
-							vTSOCw[y,r+1] == vTSOCw[y,r] + vdTSOC[y,dfPeriodMap[r,:Rep_Period_Index]])
+		# Build up in storage inventory over each representative period w
+		# Build up inventory can be positive or negative
+		@variable(EP, vdTSOC[y in TS_and_LDS, w=1:REP_PERIOD])
+		# Note: tw_min = hours_per_subperiod*(w-1)+1; tw_max = hours_per_subperiod*w
+		@constraint(EP, cThermSoCBalLongDurationStorageStart[w=1:REP_PERIOD, y in TS_and_LDS], (
+				vTS[y,hours_per_subperiod * (w - 1) + 1] ==
+						   (1 - dfGen[y, :Self_Disch]) * (vTS[y, hours_per_subperiod * w] - vdTSOC[y,w])
+						 - (1 / df_Gen[y, :Eff_Down] * EP[:vP][y, hours_per_subperiod * (w - 1) + 1])
+						 - (1 / df_Gen[y, :Eff_Down] * dfGen[y,:Start_Fuel_MMBTU_per_MW] * dfGen[y,:Cap_Size] * EP[:vSTART][y,hours_per_subperiod * (w - 1) + 1])
+					 + (dfGen[y, :Eff_Up] * vCP[y,hours_per_subperiod * (w - 1) + 1])
+					 ))
 
-			## Last period is linked to first period
-			@constraint(EP, cThermSoCBalLongDurationStorageEnd[y, r in MODELED_PERIODS_INDEX[end]],
-							vTSOCw[y,1] == vTSOCw[y,r] + vdTSOC[y,dfPeriodMap[r,:Rep_Period_Index]])
+		# Storage at beginning of period w = storage at beginning of period w-1 + storage built up in period w (after n representative periods)
+		## Multiply storage build up term from prior period with corresponding weight
+		@constraint(EP, cThermSoCBalLongDurationStorageInterior[y in TS_and_LDS, r in MODELED_PERIODS_INDEX[1:(end-1)]],
+						vTSOCw[y,r+1] == vTSOCw[y,r] + vdTSOC[y,dfPeriodMap[r,:Rep_Period_Index]])
 
-			# Storage at beginning of each modeled period cannot exceed installed energy capacity
-			@constraint(EP, cThermSoCBalLongDurationStorageUpper[y, r in MODELED_PERIODS_INDEX],
-							vTSOCw[y,r] <= vTSCAP[y])
+		## Last period is linked to first period
+		@constraint(EP, cThermSoCBalLongDurationStorageEnd[y in TS_and_LDS, r in MODELED_PERIODS_INDEX[end]],
+						vTSOCw[y,1] == vTSOCw[y,r] + vdTSOC[y,dfPeriodMap[r,:Rep_Period_Index]])
 
-			# Initial storage level for representative periods must also adhere to sub-period storage inventory balance
-			# Initial storage = Final storage - change in storage inventory across representative period
-			@constraint(EP, cThermSoCBalLongDurationStorageSub[y, r in REP_PERIODS_INDEX],
-							vTSOCw[y,r] == vTS[y,hours_per_subperiod*dfPeriodMap[r,:Rep_Period_Index]] - vdTSOC[y,dfPeriodMap[r,:Rep_Period_Index]])
+		# Storage at beginning of each modeled period cannot exceed installed energy capacity
+		@constraint(EP, cThermSoCBalLongDurationStorageUpper[y in TS_and_LDS, r in MODELED_PERIODS_INDEX],
+						vTSOCw[y,r] <= vTSCAP[y])
 
-		end
+		# Initial storage level for representative periods must also adhere to sub-period storage inventory balance
+		# Initial storage = Final storage - change in storage inventory across representative period
+		@constraint(EP, cThermSoCBalLongDurationStorageSub[y in TS_and_LDS, r in REP_PERIODS_INDEX],
+						vTSOCw[y,r] == vTS[y,hours_per_subperiod*dfPeriodMap[r,:Rep_Period_Index]] - vdTSOC[y,dfPeriodMap[r,:Rep_Period_Index]])
+
 	end
 
 	# Thermal storage investment costs
