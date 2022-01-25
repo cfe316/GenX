@@ -164,8 +164,9 @@ function thermal_storage(EP::Model, inputs::Dict)
 	@constraint(EP, cCPRat[y in dfTS[dfTS.Generator_Core_Power_Ratio.>0,:R_ID]],
 				vCCAP[y] * dfGen[y,:Eff_Down] ==
 				EP[:vCAP][y] * dfGen[y,:Cap_Size] / by_rid(y,:Generator_Core_Power_Ratio))
-	# Fixed storage duration
-	@constraint(EP, cTSDur[y in dfTS[dfTS.Duration.>0,:R_ID]], vTSCAP[y] == by_rid(y,:Duration) * vCCAP[y])
+	# Limits on storage duration
+	@constraint(EP, cTSMinDur[y in TS], vTSCAP[y] >= dfGen[y,:Min_Duration] * vCCAP[y])
+	@constraint(EP, cTSMaxDur[y in TS], vTSCAP[y] <= dfGen[y,:Max_Duration] * vCCAP[y])
 
 	### FUSION CONSTRAINTS ###
 	FUS =  dfTS[dfTS.FUS.>=1,:R_ID]
