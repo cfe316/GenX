@@ -67,6 +67,19 @@ function write_scaled_values(EP::Model, inputs::Dict, symbol::Symbol, filename::
 	return df
 end
 
+function write_thermal_storage_system_max_dual(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
+	dfTS = inputs["dfTS"]
+
+	FIRST_ROW = 1
+	if dfTS[FIRST_ROW, :System_Max_Cap_MW_th] >= 0
+		val = dual.(EP[:cCSystemTot])
+		val *= setup["ParameterScale"] == 1 ? ModelScalingFactor : 1.0
+		df = DataFrame(:System_Max_Cap_MW_th_dual => val)
+		filename = joinpath(path, "System_Max_TS_Cap_dual.csv")
+		CSV.write(filename, dftranspose(df, false), writeheader=false)
+	end
+end
+
 
 @doc raw"""
 	write_capacity(path::AbstractString, inputs::Dict, setup::Dict, EP::Model))
@@ -115,6 +128,9 @@ function write_thermal_storage(path::AbstractString, inputs::Dict, setup::Dict, 
 	dfFStart = write_core_behaviors(EP, inputs, :vFSTART, joinpath(path, "f_start.csv"))
 	dfFShut = write_core_behaviors(EP, inputs, :vFSHUT, joinpath(path, "f_shut.csv"))
 	dfFCommit = write_core_behaviors(EP, inputs, :vFCOMMIT, joinpath(path, "f_commit.csv"))
+
+	# Write dual values of certain constraints
+	write_thermal_storage_system_max_dual(path, inputs, setup, EP)
 
 	return dfCoreCap, dfCorePwr, dfTSOC, dfFStart, dfFShut, dfFCommit
 end
