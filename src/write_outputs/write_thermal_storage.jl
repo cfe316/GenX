@@ -71,7 +71,7 @@ function write_thermal_storage_system_max_dual(path::AbstractString, inputs::Dic
 	dfTS = inputs["dfTS"]
 
 	FIRST_ROW = 1
-	if dfTS[FIRST_ROW, :System_Max_Cap_MW_th] >= 0
+	if dfTS[FIRST_ROW, :System_Max_Cap_MWe_net] >= 0
 		val = dual.(EP[:cCSystemTot])
 		val *= setup["ParameterScale"] == 1 ? ModelScalingFactor : 1.0
 		df = DataFrame(:System_Max_Cap_MW_th_dual => val)

@@ -57,8 +57,8 @@ function thermal_storage(EP::Model, inputs::Dict)
 	@constraint(EP, cCCAPMax[y in those_with_max_cap], vCCAP[y] <= by_rid(y, :Max_Cap_MW_th))
 	#System-wide installed capacity is less than a specified maximum limit
 	FIRST_ROW = 1
-	if dfTS[FIRST_ROW, :System_Max_Cap_MW_th] >= 0
-		@constraint(EP, cCSystemTot, sum(vCCAP[y] for y in TS) == dfTS[FIRST_ROW, :System_Max_Cap_MW_th])
+	if dfTS[FIRST_ROW, :System_Max_Cap_MWe_net] >= 0
+		@constraint(EP, cCSystemTot, sum((vCCAP[y] * dfGen[y, :Eff_Down] * (1 - by_rid(y,:Recirc_Pass) -  by_rid(y,:Recirc_Act))) for y in TS) == dfTS[FIRST_ROW, :System_Max_Cap_MWe_net])
 	end
 
 
