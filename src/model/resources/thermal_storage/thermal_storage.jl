@@ -155,10 +155,13 @@ function thermal_storage(EP::Model, inputs::Dict)
 	EP[:eObj] += eTotalCFixedTS
 
 	# Parameter Fixing Constraints
-	# Fixed ratio of generator capacity to core net electric power
-	@constraint(EP, cCPRat[y in dfTS[dfTS.Generator_Core_Power_Ratio.>0,:R_ID]],
-				vCCAP[y] * dfGen[y,:Eff_Down] ==
-				EP[:vCAP][y] * dfGen[y,:Cap_Size] / by_rid(y,:Generator_Core_Power_Ratio))
+	# Fixed ratio of gross generator capacity to core equivalent gross electric power
+	@constraint(EP, cCPRatMax[y in dfTS[dfTS.Max_Generator_Core_Power_Ratio.>0,:R_ID]],
+				vCCAP[y] * dfGen[y,:Eff_Down] * by_rid(y,:Max_Generator_Core_Power_Ratio) >=
+				EP[:vCAP][y] * dfGen[y,:Cap_Size])
+	@constraint(EP, cCPRatMin[y in dfTS[dfTS.Min_Generator_Core_Power_Ratio.>0,:R_ID]],
+				vCCAP[y] * dfGen[y,:Eff_Down] * by_rid(y,:Min_Generator_Core_Power_Ratio) <=
+				EP[:vCAP][y] * dfGen[y,:Cap_Size])
 	# Limits on storage duration
 	@constraint(EP, cTSMinDur[y in TS], vTSCAP[y] >= dfGen[y,:Min_Duration] * vCCAP[y])
 	@constraint(EP, cTSMaxDur[y in TS], vTSCAP[y] <= dfGen[y,:Max_Duration] * vCCAP[y])
