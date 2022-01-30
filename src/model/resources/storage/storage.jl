@@ -154,7 +154,7 @@ function storage(EP::Model, inputs::Dict, Reserves::Int, OperationWrapping::Int)
 		EP = investment_energy(EP, inputs)
 		EP = storage_all(EP, inputs, Reserves, OperationWrapping)
 
-		# Include LongDurationStorage only when modeling representative periods and long-duration storage
+		# Include Long Duration Storage only when modeling representative periods and long-duration storage
 		if OperationWrapping == 1 && !isempty(inputs["STOR_LONG_DURATION"])
 			EP = long_duration_storage(EP, inputs)
 		end
