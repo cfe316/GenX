@@ -122,8 +122,8 @@ function thermal_storage(EP::Model, inputs::Dict)
 		@constraint(EP, cThermSoCBalLongDurationStorageStart[w=1:REP_PERIOD, y in TS_and_LDS], (
 				vTS[y,hours_per_subperiod * (w - 1) + 1] ==
 						   (1 - dfGen[y, :Self_Disch]) * (vTS[y, hours_per_subperiod * w] - vdTSOC[y,w])
-						 - (1 / df_Gen[y, :Eff_Down] * EP[:vP][y, hours_per_subperiod * (w - 1) + 1])
-						 - (1 / df_Gen[y, :Eff_Down] * dfGen[y,:Start_Fuel_MMBTU_per_MW] * dfGen[y,:Cap_Size] * EP[:vSTART][y,hours_per_subperiod * (w - 1) + 1])
+						 - (1 / dfGen[y, :Eff_Down] * EP[:vP][y, hours_per_subperiod * (w - 1) + 1])
+						 - (1 / dfGen[y, :Eff_Down] * dfGen[y,:Start_Fuel_MMBTU_per_MW] * dfGen[y,:Cap_Size] * EP[:vSTART][y,hours_per_subperiod * (w - 1) + 1])
 					 + (dfGen[y, :Eff_Up] * vCP[y,hours_per_subperiod * (w - 1) + 1])
 					 ))
 
