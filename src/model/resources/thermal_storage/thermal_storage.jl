@@ -14,11 +14,23 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+function split_LDS_and_nonLDS(df::DataFrame, inputs::Dict, setup::Dict)
+	TS = inputs["TS"]
+	if setup["OperationWrapping"] == 1
+		TS_and_LDS = intersect(TS, df[df.LDS.==1,:R_ID])
+		TS_and_nonLDS = intersect(TS, df[df.LDS.!=1,:R_ID])
+	else
+		TS_and_LDS = Int[]
+		TS_and_nonLDS = TS
+	end
+	TS_and_LDS, TS_and_nonLDS
+end
+
 @doc raw"""
-    thermal_storage(EP::Model, inputs::Dict)
+    thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 
 """
-function thermal_storage(EP::Model, inputs::Dict)
+function thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 
 	println("Thermal Storage Module")
 
@@ -93,9 +105,7 @@ function thermal_storage(EP::Model, inputs::Dict)
 		- (dfGen[y,:Self_Disch] * vTS[y,t-1]))
 	)
 
-	# Thermal SOC balance constraints
-	TS_and_LDS = intersect(TS, dfGen[dfGen.LDS.==1,:R_ID])
-	TS_and_nonLDS = intersect(TS, dfGen[dfGen.LDS.!=1,:R_ID])
+	TS_and_LDS, TS_and_nonLDS = split_LDS_and_nonLDS(dfGen, inputs, setup)
 
 	@constraint(EP, cTSoCBalStart[t in START_SUBPERIODS, y in TS_and_nonLDS],(
 	 vTS[y,t] == vTS[y, t + hours_per_subperiod - 1]
