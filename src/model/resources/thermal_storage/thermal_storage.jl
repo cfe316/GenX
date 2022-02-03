@@ -105,6 +105,7 @@ function thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 		- (dfGen[y,:Self_Disch] * vTS[y,t-1]))
 	)
 
+	# TODO: perhaps avoid recomputing these; instead use sets TS_LONG_DURATION, etc
 	TS_and_LDS, TS_and_nonLDS = split_LDS_and_nonLDS(dfGen, inputs, setup)
 
 	@constraint(EP, cTSoCBalStart[t in START_SUBPERIODS, y in TS_and_nonLDS],(

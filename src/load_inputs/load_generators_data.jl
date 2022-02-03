@@ -291,6 +291,9 @@ function load_thermal_storage_data!(setup::Dict, path::AbstractString, inputs_ge
 		thermal_storage_errors = check_thermal_storage_validity(gen_in)
 		append!(error_strings, thermal_storage_errors)
 
+		inputs_gen["TS_LONG_DURATION"] = gen_in[(gen_in.LDS.==1) .& (gen_in.TS.==1),:R_ID]
+		inputs_gen["TS_SHORT_DURATION"] = gen_in[(gen_in.LDS.==0) .& (gen_in.TS.==1),:R_ID]
+
 		ts_in = DataFrame(CSV.File(joinpath(path,"Thermal_storage.csv"), header=true), copycols=true)
 
 		if setup["ParameterScale"] == 1
