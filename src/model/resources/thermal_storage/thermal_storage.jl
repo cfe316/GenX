@@ -293,10 +293,10 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 			[t in setdiff(INTERIOR_SUBPERIODS,F_Max_Up_HOURS)], vFCOMMIT[y,t] <= sum(vFSTART[y,e] for e=(t+1-by_rid(y,:Max_Up)):t)
 
 			# Wraps up-time constraint around period ends
-			[t in F_Max_Up_HOURS], vFCOMMIT[y,t] <= sum(vFSTART[y,e] for e=(t-((t%hours_per_subperiod)-1):t)) 
-												  + sum(vFSTART[y,e] for e=((t+hours_per_subperiod-(t%hours_per_subperiod))-(by_rid(y,:Max_Up)-(t%hours_per_subperiod))+1):(t+hours_per_subperiod-(t%hours_per_subperiod)))
-			[t in START_SUBPERIODS], vFCOMMIT[y,t] <= vFSTART[y,t] 
-													+ sum(vFSTART[y,e] for e=((t+hours_per_subperiod-1)-(by_rid(y,:Max_Up) - 1) + 1):(t+hours_per_subperiod-1))
+			[t in F_Max_Up_HOURS], vFCOMMIT[y,t] <= sum(vFSTART[y,e] for e=(t-((t%hours_per_subperiod)-1):t)) +
+												    sum(vFSTART[y,e] for e=((t+hours_per_subperiod-(t%hours_per_subperiod))-(by_rid(y,:Max_Up)-(t%hours_per_subperiod))+1):(t+hours_per_subperiod-(t%hours_per_subperiod)))
+			[t in START_SUBPERIODS], vFCOMMIT[y,t] <= vFSTART[y,t] + 
+													sum(vFSTART[y,e] for e=((t+hours_per_subperiod-1)-(by_rid(y,:Max_Up) - 1) + 1):(t+hours_per_subperiod-1))
 		end)
 	end
 
