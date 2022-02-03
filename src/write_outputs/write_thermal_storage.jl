@@ -69,11 +69,6 @@ end
 
 function write_thermal_storage_system_max_dual(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
 	dfTS = inputs["dfTS"]
-	dfGen = inputs["dfGen"]
-
-	function by_rid(rid::Integer, sym::Symbol)
-		return dfTS[dfTS.R_ID .== rid, sym][]
-	end
 
 	FIRST_ROW = 1
 	if dfTS[FIRST_ROW, :System_Max_Cap_MWe_net] >= 0
