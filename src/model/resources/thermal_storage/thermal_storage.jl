@@ -199,7 +199,7 @@ Apply fusion-core-specific constraints to the model.
 function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 
 	T = inputs["T"]     # Number of time steps (hours)
-	Z = inputs["Z"]     # Number of zonesd
+	Z = inputs["Z"]     # Number of zones
 
 	START_SUBPERIODS = inputs["START_SUBPERIODS"]
 	INTERIOR_SUBPERIODS = inputs["INTERIOR_SUBPERIODS"]
