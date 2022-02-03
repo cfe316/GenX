@@ -184,7 +184,7 @@ function thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 
 	# Use fusion constraints if thermal cores tagged 'FUS' are present
 	if !isempty(FUS)
-		fusion_constraints!(EP, inputs)
+		fusion_constraints!(EP, inputs, setup)
 	end
 
 return EP
@@ -196,10 +196,10 @@ end
 Apply fusion-core-specific constraints to the model.
 
 """
-function fusion_constraints!(EP::Model, inputs::Dict)
+function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 
 	T = inputs["T"]     # Number of time steps (hours)
-	Z = inputs["Z"]     # Number of zones
+	Z = inputs["Z"]     # Number of zonesd
 
 	START_SUBPERIODS = inputs["START_SUBPERIODS"]
 	INTERIOR_SUBPERIODS = inputs["INTERIOR_SUBPERIODS"]
@@ -216,9 +216,11 @@ function fusion_constraints!(EP::Model, inputs::Dict)
 
 	# UC variables for the fusion core, analogous to standard UC
 	@variables(EP, begin
-		vFCOMMIT[y in FUS, t=1:T] >= 0
-		vFSTART[y in FUS, t=1:T] >= 0
-		vFSHUT[y in FUS, t=1:T] >= 0
+		vFCOMMIT[y in FUS, t=1:T] >= 0 #core commitment status
+		vFSTART[y in FUS, t=1:T] >= 0 #core startup
+		vFSHUT[y in FUS, t=1:T] >= 0 #core shutdown
+		vFMDOWN[y in FUS, t=1:T] >= 0 #core maintenance status
+		vFMSHUT[y in FUS, t=1:T] >= 0 #core maintenance shutdown
 	end)
 
 	#Declare core integer/binary variables if Integer_Commit is set to 1
@@ -227,15 +229,19 @@ function fusion_constraints!(EP::Model, inputs::Dict)
 			set_integer.(vFCOMMIT[y,:])
 			set_integer.(vFSTART[y,:])
 			set_integer.(vFSHUT[y,:])
+			set_integer.(vFMDOWN[y,:])
+			set_integer.(vFMSHUT[y,:])
 			set_integer.(EP[:vCCAP][y])
 		end
 	end
 
-	# Upper bounds on core commitment/start/shut
+	# Upper bounds on core commitment/start/shut, and optional maintenance variables
 	@constraints(EP, begin
 		[y in FUS, t=1:T], vFCOMMIT[y,t] <= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
 		[y in FUS, t=1:T], vFSTART[y,t] <= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
 		[y in FUS, t=1:T], vFSHUT[y,t] <= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
+		[y in FUS, t=1:T], vFMDOWN[y,t] <= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
+		[y in FUS, t=1:T], vFMSHUT[y,t] <= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
 	end)
 
 	# Commitment state constraint linking startup and shutdown decisions
@@ -244,7 +250,7 @@ function fusion_constraints!(EP::Model, inputs::Dict)
 		[y in FUS, t in START_SUBPERIODS], vFCOMMIT[y,t] == vFCOMMIT[y,(t+hours_per_subperiod-1)] + vFSTART[y,t] - vFSHUT[y,t]
 		# For all other hours, links commitment state in hour t with commitment state in
 		# prior hour + sum of start up and shut down in current hour
-		[y in FUS, t in INTERIOR_SUBPERIODS], vFCOMMIT[y,t] == vFCOMMIT[y,t-1] + vFSTART[y,t] - vFSHUT[y,t]
+		[y in FUS, t in INTERIOR_SUBPERIODS], vFCOMMIT[y,t] == vFCOMMIT[y,t-1] + vFSTART[y,t] - vFSHUT[y,t] 
 	end)
 
 	# Minimum and maximum core power output
@@ -287,24 +293,61 @@ function fusion_constraints!(EP::Model, inputs::Dict)
 			[t in setdiff(INTERIOR_SUBPERIODS,F_Max_Up_HOURS)], vFCOMMIT[y,t] <= sum(vFSTART[y,e] for e=(t+1-by_rid(y,:Max_Up)):t)
 
 			# Wraps up-time constraint around period ends
-			[t in F_Max_Up_HOURS], vFCOMMIT[y,t] <= sum(vFSTART[y,e] for e=(t-((t%hours_per_subperiod)-1):t)) +
-													sum(vFSTART[y,e] for e=((t+hours_per_subperiod-(t%hours_per_subperiod))-(by_rid(y,:Max_Up)-(t%hours_per_subperiod))+1):(t+hours_per_subperiod-(t%hours_per_subperiod)))
-			[t in START_SUBPERIODS], vFCOMMIT[y,t] <= vFSTART[y,t] +
-													  sum(vFSTART[y,e] for e=((t+hours_per_subperiod-1)-(by_rid(y,:Max_Up) - 1) + 1):(t+hours_per_subperiod-1))
+			[t in F_Max_Up_HOURS], vFCOMMIT[y,t] <= sum(vFSTART[y,e] for e=(t-((t%hours_per_subperiod)-1):t)) 
+												  + sum(vFSTART[y,e] for e=((t+hours_per_subperiod-(t%hours_per_subperiod))-(by_rid(y,:Max_Up)-(t%hours_per_subperiod))+1):(t+hours_per_subperiod-(t%hours_per_subperiod)))
+			[t in START_SUBPERIODS], vFCOMMIT[y,t] <= vFSTART[y,t] 
+													+ sum(vFSTART[y,e] for e=((t+hours_per_subperiod-1)-(by_rid(y,:Max_Up) - 1) + 1):(t+hours_per_subperiod-1))
 		end)
 	end
 
+	MAINTENANCE = intersect(FUS, dfTS[dfTS.Maintenance_Time.>0, :R_ID])
+
+	#require plant to shut down during maintenance
+	@constraint(EP, [y in FUS, t=1:T], EP[:vCCAP][y]/by_rid(y,:Cap_Size)-vFCOMMIT[y,t] >= vFMDOWN[y,t])
+
+	#optional maintenance time constraints
+	if setup["OperationWrapping"] == 0 && !isempty(MAINTENANCE)
+		for y in MAINTENANCE
+			Maintenance_Time = Int(floor(by_rid(y,:Maintenance_Time)))
+			Maintenance_Time_HOURS = [] # Set of hours in the summation term of the maintenance time constraint for the first subperiod of each representative period
+			for s in START_SUBPERIODS
+				Maintenance_Time_HOURS = union(Maintenance_Time_HOURS, (s+1):(s+Maintenance_Time-1))
+			end
+
+			@constraints(EP, begin
+				# cMaintenanceTimeInterior: Constraint looks back over last n hours, where n = dfTS[y,:Maintenance_Time]
+				[t in setdiff(INTERIOR_SUBPERIODS,Maintenance_Time_HOURS)], vFMDOWN[y,t] == sum(vFMSHUT[y,e] for e=(t-by_rid(y,:Maintenance_Time)):t)
+	
+				# cMaintenanceTimeWrap: If n is greater than the number of subperiods left in the period, constraint wraps around to first hour of time series
+				# cMaintenanceTimeWrap 
+				[t in Maintenance_Time_HOURS], vFMDOWN[y,t] == sum(vFMSHUT[y,e] for e=(t-((t%hours_per_subperiod)-1):t))+sum(vFMSHUT[y,e] for e=((t+hours_per_subperiod-(t%hours_per_subperiod))-(by_rid(y,:Maintenance_Time)-(t%hours_per_subperiod))):(t+hours_per_subperiod-(t%hours_per_subperiod)))
+	
+				# cMaintenanceTimeStart:
+				[t in START_SUBPERIODS], vFMDOWN[y,t] == vFMSHUT[y,t]+sum(vFMSHUT[y,e] for e=((t+hours_per_subperiod-1)-(by_rid(y,:Maintenance_Time)-1)):(t+hours_per_subperiod-1))
+
+				#Require maintenance at least once per year per core
+				sum(vFMSHUT[y,t]*inputs["omega"][t] for t in 1:T) >= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
+
+			end)
+		end
+	else
+		@constraint(EP, [y in FUS, t=1:T], vFMDOWN[y,t] == 0)
+	end
+
+
 	# Passive and active recirculating power for each fusion generator
 	# Passive recirculating power, depending on built capacity
-	@expression(EP, ePassiveRecircFus[y in FUS], EP[:vCCAP][y] * dfGen[y,:Eff_Down] * by_rid(y,:Recirc_Pass))
+	@expression(EP, ePassiveRecircFus[y in FUS, t=1:T], (EP[:vCCAP][y] - by_rid(y,:Cap_Size) * vFMDOWN[y,t]) * dfGen[y,:Eff_Down] * by_rid(y,:Recirc_Pass))
 	# Active recirculating power, depending on committed capacity
 	@expression(EP, eActiveRecircFus[y in FUS, t=1:T], by_rid(y,:Cap_Size) * vFCOMMIT[y,t] * dfGen[y,:Eff_Down] * by_rid(y,:Recirc_Act))
 	# Startup energy, taken from the grid every time the core starts up
 	@expression(EP, eStartEnergyFus[y in FUS, t=1:T], by_rid(y,:Cap_Size) * vFSTART[y,t] * dfGen[y,:Eff_Down] * by_rid(y,:Start_Energy))
+	#Total recirculating power at each timestep
+	@expression(EP, eTotalRecircFus[y in FUS, t=1:T], ePassiveRecircFus[y,t]+eActiveRecircFus[y,t]+eStartEnergyFus[y,t])
 
 	# Total recirculating power from fusion in each zone
 	@expression(EP, ePowerBalanceRecircFus[t=1:T, z=1:Z],
-		-sum((ePassiveRecircFus[y]+eActiveRecircFus[y,t]+eStartEnergyFus[y,t]) for y in intersect(FUS, dfTS[dfTS[!,:Zone].==z,:R_ID])))
+		-sum((eTotalRecircFus[y,t]) for y in intersect(FUS, dfTS[dfTS[!,:Zone].==z,:R_ID])))
 
 	EP[:ePowerBalance] += ePowerBalanceRecircFus
 end
