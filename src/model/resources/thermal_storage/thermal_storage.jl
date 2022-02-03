@@ -305,7 +305,9 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 	#require plant to shut down during maintenance
 	@constraint(EP, [y in FUS, t=1:T], EP[:vCCAP][y]/by_rid(y,:Cap_Size)-vFCOMMIT[y,t] >= vFMDOWN[y,t])
 
-	#optional maintenance time constraints
+	# Maintenance constraints are optional, and are only activated when OperationWrapping is off.
+	# This is to *prevent* these constraints when using TimeDomainReduction, since it would no longer
+	# make sense to have contiguous many-week-long periods which only happen once per year.
 	if setup["OperationWrapping"] == 0 && !isempty(MAINTENANCE)
 		for y in MAINTENANCE
 			Maintenance_Time = Int(floor(by_rid(y,:Maintenance_Time)))
