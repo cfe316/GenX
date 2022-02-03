@@ -72,7 +72,7 @@ function write_thermal_storage_system_max_dual(path::AbstractString, inputs::Dic
 
 	FIRST_ROW = 1
 	if dfTS[FIRST_ROW, :System_Max_Cap_MWe_net] >= 0
-		val = dual.(EP[:cCSystemTot])
+		val = -1*dual.(EP[:cCSystemTot])
 		val *= setup["ParameterScale"] == 1 ? ModelScalingFactor : 1.0
 		df = DataFrame(:System_Max_Cap_MW_th_dual => val)
 		filename = joinpath(path, "System_Max_TS_Cap_dual.csv")
@@ -124,10 +124,17 @@ function write_thermal_storage(path::AbstractString, inputs::Dict, setup::Dict, 
 	### THERMAL SOC TIME SERIES ###
 	dfTSOC = write_scaled_values(EP, inputs, :vTS, joinpath(path, "TS_SOC.csv"), msf)
 
-	### CORE STARTS, SHUTS, and COMMITS TIMESERIES ###
+	### RECIRCULATING POWER TIME SERIES ###
+	dfRecirc = write_scaled_values(EP, inputs, :eTotalRecircFus, joinpath(path, "TS_Recirc.csv"), msf)
+
+	### CORE STARTS, SHUTS, COMMITS, and MAINTENANCE TIMESERIES ###
 	dfFStart = write_core_behaviors(EP, inputs, :vFSTART, joinpath(path, "f_start.csv"))
 	dfFShut = write_core_behaviors(EP, inputs, :vFSHUT, joinpath(path, "f_shut.csv"))
 	dfFCommit = write_core_behaviors(EP, inputs, :vFCOMMIT, joinpath(path, "f_commit.csv"))
+
+	if setup["OperationWrapping"] == 0 && !isempty(dfTS[dfTS[!,:Maintenance_Time].>=0,:])
+		dfMaint = write_core_behaviors(EP, inputs, :vFMDOWN, joinpath(path, "f_maint.csv"))
+	end
 
 	# Write dual values of certain constraints
 	write_thermal_storage_system_max_dual(path, inputs, setup, EP)
