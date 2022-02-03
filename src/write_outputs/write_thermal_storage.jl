@@ -132,7 +132,7 @@ function write_thermal_storage(path::AbstractString, inputs::Dict, setup::Dict, 
 	dfFShut = write_core_behaviors(EP, inputs, :vFSHUT, joinpath(path, "f_shut.csv"))
 	dfFCommit = write_core_behaviors(EP, inputs, :vFCOMMIT, joinpath(path, "f_commit.csv"))
 
-	if (setup["OperationWrapping"] == 0) && !isempty(dfTS[dfTS[!,:Maintenance_Time].>=0,:])
+	if setup["OperationWrapping"] == 0 && !isempty(dfTS[dfTS[!,:Maintenance_Time].>=0,:])
 		dfMaint = write_core_behaviors(EP, inputs, :vFMDOWN, joinpath(path, "f_maint.csv"))
 	end
 
