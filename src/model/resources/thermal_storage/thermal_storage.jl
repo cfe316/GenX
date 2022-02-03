@@ -214,6 +214,9 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 
 	FUS =  dfTS[dfTS.FUS.>=1,:R_ID]
 
+	MAINTENANCE = intersect(FUS, dfTS[dfTS.Maintenance_Time.>0, :R_ID])
+	sanity_check_maintenance(MAINTENANCE, setup)
+
 	# UC variables for the fusion core, analogous to standard UC
 	@variables(EP, begin
 		vFCOMMIT[y in FUS, t=1:T] >= 0 #core commitment status
@@ -250,7 +253,7 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 		[y in FUS, t in START_SUBPERIODS], vFCOMMIT[y,t] == vFCOMMIT[y,(t+hours_per_subperiod-1)] + vFSTART[y,t] - vFSHUT[y,t]
 		# For all other hours, links commitment state in hour t with commitment state in
 		# prior hour + sum of start up and shut down in current hour
-		[y in FUS, t in INTERIOR_SUBPERIODS], vFCOMMIT[y,t] == vFCOMMIT[y,t-1] + vFSTART[y,t] - vFSHUT[y,t] 
+		[y in FUS, t in INTERIOR_SUBPERIODS], vFCOMMIT[y,t] == vFCOMMIT[y,t-1] + vFSTART[y,t] - vFSHUT[y,t]
 	end)
 
 	# Minimum and maximum core power output
@@ -295,12 +298,10 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 			# Wraps up-time constraint around period ends
 			[t in F_Max_Up_HOURS], vFCOMMIT[y,t] <= sum(vFSTART[y,e] for e=(t-((t%hours_per_subperiod)-1):t)) +
 												    sum(vFSTART[y,e] for e=((t+hours_per_subperiod-(t%hours_per_subperiod))-(by_rid(y,:Max_Up)-(t%hours_per_subperiod))+1):(t+hours_per_subperiod-(t%hours_per_subperiod)))
-			[t in START_SUBPERIODS], vFCOMMIT[y,t] <= vFSTART[y,t] + 
+			[t in START_SUBPERIODS], vFCOMMIT[y,t] <= vFSTART[y,t] +
 													sum(vFSTART[y,e] for e=((t+hours_per_subperiod-1)-(by_rid(y,:Max_Up) - 1) + 1):(t+hours_per_subperiod-1))
 		end)
 	end
-
-	MAINTENANCE = intersect(FUS, dfTS[dfTS.Maintenance_Time.>0, :R_ID])
 
 	#require plant to shut down during maintenance
 	@constraint(EP, [y in FUS, t=1:T], EP[:vCCAP][y]/by_rid(y,:Cap_Size)-vFCOMMIT[y,t] >= vFMDOWN[y,t])
@@ -319,11 +320,11 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 			@constraints(EP, begin
 				# cMaintenanceTimeInterior: Constraint looks back over last n hours, where n = dfTS[y,:Maintenance_Time]
 				[t in setdiff(INTERIOR_SUBPERIODS,Maintenance_Time_HOURS)], vFMDOWN[y,t] == sum(vFMSHUT[y,e] for e=(t-by_rid(y,:Maintenance_Time)):t)
-	
+
 				# cMaintenanceTimeWrap: If n is greater than the number of subperiods left in the period, constraint wraps around to first hour of time series
-				# cMaintenanceTimeWrap 
+				# cMaintenanceTimeWrap
 				[t in Maintenance_Time_HOURS], vFMDOWN[y,t] == sum(vFMSHUT[y,e] for e=(t-((t%hours_per_subperiod)-1):t))+sum(vFMSHUT[y,e] for e=((t+hours_per_subperiod-(t%hours_per_subperiod))-(by_rid(y,:Maintenance_Time)-(t%hours_per_subperiod))):(t+hours_per_subperiod-(t%hours_per_subperiod)))
-	
+
 				# cMaintenanceTimeStart:
 				[t in START_SUBPERIODS], vFMDOWN[y,t] == vFMSHUT[y,t]+sum(vFMSHUT[y,e] for e=((t+hours_per_subperiod-1)-(by_rid(y,:Maintenance_Time)-1)):(t+hours_per_subperiod-1))
 
@@ -352,4 +353,18 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 		-sum((eTotalRecircFus[y,t]) for y in intersect(FUS, dfTS[dfTS[!,:Zone].==z,:R_ID])))
 
 	EP[:ePowerBalance] += ePowerBalanceRecircFus
+end
+
+function sanity_check_maintenance(MAINTENANCE::Vector{Int}, setup::Dict)
+	println("Performing sanity check")
+	ow = setup["OperationWrapping"]
+	tdr = setup["TimeDomainReduction"]
+
+	is_maint_reqs = !isempty(MAINTENANCE)
+	if (ow >= 0 || tdr >= 0) && is_maint_reqs
+		println("Resources ", MAINTENANCE, " have Maintenance_Time > 0,")
+		println("but also OperationWrapping (", ow, ") or TimeDomainReduction (", tdr, ").")
+		println("These are incompatible with a Maintenance requirement.")
+		error("Incompatible GenX settings and maintenance requirements.")
+	end
 end
