@@ -25,7 +25,7 @@ function write_power(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
 	T = inputs["T"]     # Number of time steps (hours)
 
 	# Power injected by each resource in each time step
-	dfPower = DataFrame(Resource = inputs["RESOURCES"], Zone = dfGen[!,:Zone], AnnualSum = Array{Union{Missing,Float64}}(undef, G))
+	dfPower = DataFrame(Resource = inputs["RESOURCES"], Zone = dfGen[!,:Zone], AnnualSum = Array{Float64}(undef, G))
 	power = value.(EP[:vP])
 	if setup["ParameterScale"] == 1
 		power *= ModelScalingFactor

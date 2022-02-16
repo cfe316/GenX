@@ -21,7 +21,7 @@ function write_shutdown(path::AbstractString, inputs::Dict, setup::Dict, EP::Mod
 	# Operational decision variable states
 	COMMIT = inputs["COMMIT"]
 	# Shutdown state for each resource in each time step
-	dfShutdown = DataFrame(Resource = inputs["RESOURCES"], Zone = dfGen[!, :Zone], Sum = Array{Union{Missing,Float64}}(undef, G))
+	dfShutdown = DataFrame(Resource = inputs["RESOURCES"], Zone = dfGen[!, :Zone], Sum = Array{Float64}(undef, G))
 	shut = zeros(G,T)
 	shut[COMMIT, :] = value.(EP[:vSHUT][COMMIT, :])
 	dfShutdown.Sum .= sum(shut, dims=2)[:]

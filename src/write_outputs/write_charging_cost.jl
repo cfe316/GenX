@@ -19,7 +19,7 @@ function write_charging_cost(path::AbstractString, inputs::Dict, dfCharge::DataF
 	G = inputs["G"]     # Number of resources (generators, storage, DR, and DERs)
 	T = inputs["T"]     # Number of time steps (hours)
 	#calculating charging cost
- 	dfChargingcost = DataFrame(Region = dfGen[!,:region], Resource = inputs["RESOURCES"], Zone = dfGen[!,:Zone], Cluster = dfGen[!,:cluster], AnnualSum = Array{Union{Missing,Float32}}(undef, G), )
+ 	dfChargingcost = DataFrame(Region = dfGen[!,:region], Resource = inputs["RESOURCES"], Zone = dfGen[!,:Zone], Cluster = dfGen[!,:cluster], AnnualSum = Array{Float64}(undef, G), )
 	# the price is already US$/MWh, and dfPower and dfCharge is already in MW, so no scaling is needed
 	i = 1
 	dfChargingcost_ = (DataFrame([[names(dfCharge)]; collect.(eachrow(dfCharge))], [:column; Symbol.(axes(dfCharge, 1))])[4:T+3,i+1] .*
