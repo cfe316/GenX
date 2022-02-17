@@ -56,9 +56,9 @@ function write_emissions(path::AbstractString, inputs::Dict, setup::Dict, EP::Mo
 
 		for i in 1:Z
 			if setup["ParameterScale"]==1
-				dfEmissions[!,:AnnualSum][i] = sum(inputs["omega"].*value.(EP[:eEmissionsByZone])[i,:])*ModelScalingFactor
+				dfEmissions[i,:AnnualSum] = sum(inputs["omega"].*value.(EP[:eEmissionsByZone][i,:]))*ModelScalingFactor
 			else
-				dfEmissions[!,:AnnualSum][i] = sum(inputs["omega"].*value.(EP[:eEmissionsByZone])[i,:])/ModelScalingFactor
+				dfEmissions[i,:AnnualSum] = sum(inputs["omega"].*value.(EP[:eEmissionsByZone][i,:]))/ModelScalingFactor
 			end
 		end
 
@@ -96,9 +96,9 @@ function write_emissions(path::AbstractString, inputs::Dict, setup::Dict, EP::Mo
 		dfEmissions = hcat(DataFrame(Zone = 1:Z), DataFrame(AnnualSum = Array{Float64}(undef, Z)))
 		for i in 1:Z
 			if setup["ParameterScale"]==1
-				dfEmissions[!,:AnnualSum][i] = sum(inputs["omega"].*value.(EP[:eEmissionsByZone])[i,:]) *ModelScalingFactor
+				dfEmissions[!,:AnnualSum][i] = sum(inputs["omega"].*value.(EP[:eEmissionsByZone][i,:])) *ModelScalingFactor
 			else
-				dfEmissions[!,:AnnualSum][i] = sum(inputs["omega"].*value.(EP[:eEmissionsByZone])[i,:])/ModelScalingFactor
+				dfEmissions[!,:AnnualSum][i] = sum(inputs["omega"].*value.(EP[:eEmissionsByZone][i,:]))/ModelScalingFactor
 			end
 		end
 		if setup["ParameterScale"]==1
