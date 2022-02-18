@@ -49,6 +49,25 @@ function fix_integers(jump_model::Model)
 	end
 end
 
+function find_conflict(EP::Model)
+	compute_conflict!(EP)
+	if MOI.get(EP, MOI.ConflictStatus()) != MOI.CONFLICT_FOUND
+		error("No conflict could be found for an in	feasible model.")
+	end
+
+		# Get a copy of the model with only the constraints in the conflict.
+	new_model, reference_map = copy_conflict(EP)
+	conflict_constraint_list = ConstraintRef[]
+	for (F, S) in list_of_constraint_types(EP)
+		for con in all_constraints(EP, F, S)
+			if MOI.get(EP, MOI.ConstraintConflictStatus(), con) == MOI.IN_CONFLICT
+				push!(conflict_constraint_list, con)
+				println(con)
+			end
+		end
+	end	
+end
+
 @doc raw"""
 	function solve_model()
 
@@ -77,6 +96,11 @@ function solve_model(EP::Model, setup::Dict)
 
 	## Solve Model
 	optimize!(EP)
+
+	debug_conflict = true
+	if debug_conflict && termination_status(EP) == MOI.INFEASIBLE
+		find_conflict(EP)
+	end
 
 	if has_duals(EP) # fully linear model
 		println("LP solved for primal")
