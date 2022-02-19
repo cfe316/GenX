@@ -15,51 +15,42 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 
+
 function write_core_behaviors(EP::Model, inputs::Dict, symbol::Symbol, filename::AbstractString)
 	dfTS = inputs["dfTS"]
 	T = inputs["T"]
-	TSResources = dfTS[!,:Resource]
-	TSG = length(TSResources)
 
-	df = DataFrame(Resource = TSResources, Zone = dfTS[!,:Zone], Sum = Array{Union{Missing,Float32}}(undef, TSG))
-	event = zeros(TSG,T)
-	for i in 1:TSG
-		event[i,:] = value.(EP[symbol])[dfTS[i,:R_ID],:]
-		df[i,:Sum] = sum(event[i,:])
-	end
+	df = DataFrame(Resource = dfTS.Resource, Zone = dfTS.Zone)
+	THERMAL_STORAGE = dfTS.R_ID
+	event = value.(EP[symbol][THERMAL_STORAGE,:]).data
+	df.Sum = vec(sum(event, dims=2))
+
 	df = hcat(df, DataFrame(event, :auto))
 	auxNew_Names=[:Resource; :Zone; :Sum; [Symbol("t$t") for t in 1:T]]
 	rename!(df,auxNew_Names)
-	total = DataFrame(["Total" 0 sum(df[!,:Sum]) fill(0.0, (1,T))], :auto)
-	for t in 1:T
-		total[:,t+3] .= sum(df[:,Symbol("t$t")][1:TSG])
-	end
+	total = DataFrame(["Total" 0 sum(df[!,:Sum]) zeros(1,T)], :auto)
+	total[:, 4:T+3] .= sum(event, dims=1)
 	rename!(total,auxNew_Names)
 	df = vcat(df, total)
-	CSV.write(filename, dftranspose(df, false), writeheader=false)
 
+	CSV.write(filename, dftranspose(df, false), writeheader=false)
 	return df
-	end
+end
 
 function write_scaled_values(EP::Model, inputs::Dict, symbol::Symbol, filename::AbstractString, msf)
 	dfTS = inputs["dfTS"]
 	T = inputs["T"]
-	TSResources = dfTS[!,:Resource]
-	TSG = length(TSResources)
 
-	df = DataFrame(Resource = TSResources, Zone=dfTS[!,:Zone], AnnualSum = Array{Union{Missing,Float32}}(undef, TSG))
-	quantity = zeros(TSG,T)
-	for i in 1:TSG
-		quantity[i,:] = value.(EP[symbol][dfTS[i,:R_ID],:]) * msf
-		df[i,:AnnualSum] = sum(inputs["omega"].* quantity[i,:])
-	end
+	df = DataFrame(Resource = dfTS.Resource, Zone=dfTS.Zone)
+	THERMAL_STORAGE = dfTS.R_ID
+	quantity = value.(EP[symbol][THERMAL_STORAGE,:]).data * msf
+	df.AnnualSum = quantity * inputs["omega"]
+
 	df = hcat(df, DataFrame(quantity, :auto))
 	auxNew_Names=[:Resource; :Zone; :AnnualSum; [Symbol("t$t") for t in 1:T]]
 	rename!(df,auxNew_Names)
-	total = DataFrame(["Total" 0 sum(df[!,:AnnualSum]) fill(0.0, (1,T))], :auto)
-	for t in 1:T
-		total[:,t+3] .= sum(df[:,Symbol("t$t")][1:TSG])
-	end
+	total = DataFrame(["Total" 0 sum(df.AnnualSum) zeros(1,T)], :auto)
+	total[:, 4:T+3] .= sum(quantity, dims=1)
 	rename!(total,auxNew_Names)
 	df = vcat(df, total)
 	CSV.write(filename, dftranspose(df, false), writeheader=false)
