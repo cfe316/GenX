@@ -158,7 +158,7 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
 		elapsed_time_rsv_margin = @elapsed write_reserve_margin_w(path, inputs, setup, EP)
 		println("Time elapsed for writing reserve margin is")
 		println(elapsed_time_rsv_margin)
-		dfResRevenue = write_reserve_margin_revenue(path, inputs, setup, dfPower, dfCharge, dfResMar, dfCap)
+		dfResRevenue = write_reserve_margin_revenue(path, inputs, setup, EP)
 		elapsed_time_cap_value = @elapsed write_capacity_value(path, inputs, setup, dfPower, dfCharge, dfResMar, dfCap)
 		println("Time elapsed for writing capacity value is")
 		println(elapsed_time_cap_value)
