@@ -138,7 +138,7 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
 	if has_duals(EP) == 1
 		dfPrice = write_price(path, inputs, setup, EP)
 		dfEnergyRevenue = write_energy_revenue(path, inputs, setup, EP, dfPower, dfPrice, dfCharge)
-		dfChargingcost = write_charging_cost(path, inputs, dfCharge, dfPrice, dfPower, setup)
+		dfChargingcost = write_charging_cost(path, inputs, setup, EP)
 		dfSubRevenue, dfRegSubRevenue = write_subsidy_revenue(path, inputs, setup, EP)
 	end
 
