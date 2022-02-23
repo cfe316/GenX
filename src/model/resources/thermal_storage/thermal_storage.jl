@@ -338,7 +338,7 @@ function sanity_check_maintenance(MAINTENANCE::Vector{Int}, setup::Dict)
 	tdr = setup["TimeDomainReduction"]
 
 	is_maint_reqs = !isempty(MAINTENANCE)
-	if (ow >= 0 || tdr >= 0) && is_maint_reqs
+	if (ow > 0 || tdr > 0) && is_maint_reqs
 		println("Resources ", MAINTENANCE, " have Maintenance_Time > 0,")
 		println("but also OperationWrapping (", ow, ") or TimeDomainReduction (", tdr, ").")
 		println("These are incompatible with a Maintenance requirement.")
