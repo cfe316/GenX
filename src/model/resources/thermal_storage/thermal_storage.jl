@@ -279,30 +279,20 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 	MAX_UPTIME = intersect(FUS, dfTS[dfTS.Max_Up.>0, :R_ID])
 	# TODO: throw error if Max_Up == 0 since it's confusing & illdefined
 
+	p = hours_per_subperiod
+	max_uptime = zeros(Int, nrow(dfGen))
+	# this is required to be a loop since by_rid only supports single indices
 	for y in MAX_UPTIME
-		# Core max uptime. If this parameter > 0,
-		# the fusion core must be cycled at least every n hours.
-		Max_Up = by_rid(y, :Max_Up)
-
-		# Set of hours in the summation term of the maximum up time constraint for
-		# the first subperiod of each representative period
-		F_Max_Up_HOURS = []
-		for s in START_SUBPERIODS
-			F_Max_Up_HOURS = union(F_Max_Up_HOURS, (s+1):(s+Max_Up-1))
-		end
-		@constraints(EP, begin
-			# Looks back over interior timesteps and ensures that a core cannot
-			# be committed unless it has been started at some point in
-			# the previous n timesteps
-			[t in setdiff(INTERIOR_SUBPERIODS,F_Max_Up_HOURS)], vFCOMMIT[y,t] <= sum(vFSTART[y,e] for e=(t+1-by_rid(y,:Max_Up)):t)
-
-			# Wraps up-time constraint around period ends
-			[t in F_Max_Up_HOURS], vFCOMMIT[y,t] <= sum(vFSTART[y,e] for e=(t-((t%hours_per_subperiod)-1):t)) +
-												    sum(vFSTART[y,e] for e=((t+hours_per_subperiod-(t%hours_per_subperiod))-(by_rid(y,:Max_Up)-(t%hours_per_subperiod))+1):(t+hours_per_subperiod-(t%hours_per_subperiod)))
-			[t in START_SUBPERIODS], vFCOMMIT[y,t] <= vFSTART[y,t] +
-													sum(vFSTART[y,e] for e=((t+hours_per_subperiod-1)-(by_rid(y,:Max_Up) - 1) + 1):(t+hours_per_subperiod-1))
-		end)
+		max_uptime[y] = by_rid(y, :Max_Up)
 	end
+	# Core max uptime. If this parameter > 0,
+	# the fusion core must be cycled at least every n hours.
+	@constraint(EP, [y in MAX_UPTIME, t in 1:T],
+		# Looks back over interior timesteps and ensures that a core cannot
+		# be committed unless it has been started at some point in
+		# the previous n timesteps
+		vFCOMMIT[y,t] <= sum(vFSTART[y, hoursbefore(p, t, 1:max_uptime[y])])
+	)
 
 	#require plant to shut down during maintenance
 	@constraint(EP, [y in FUS, t=1:T], EP[:vCCAP][y]/by_rid(y,:Cap_Size)-vFCOMMIT[y,t] >= vFMDOWN[y,t])
@@ -311,29 +301,15 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 	# This is to *prevent* these constraints when using TimeDomainReduction, since it would no longer
 	# make sense to have contiguous many-week-long periods which only happen once per year.
 	if setup["OperationWrapping"] == 0 && !isempty(MAINTENANCE)
+		maintenance_time = zeros(Int, nrow(dfGen))
 		for y in MAINTENANCE
-			Maintenance_Time = Int(floor(by_rid(y,:Maintenance_Time)))
-			Maintenance_Time_HOURS = [] # Set of hours in the summation term of the maintenance time constraint for the first subperiod of each representative period
-			for s in START_SUBPERIODS
-				Maintenance_Time_HOURS = union(Maintenance_Time_HOURS, (s+1):(s+Maintenance_Time-1))
-			end
-
-			@constraints(EP, begin
-				# cMaintenanceTimeInterior: Constraint looks back over last n hours, where n = dfTS[y,:Maintenance_Time]
-				[t in setdiff(INTERIOR_SUBPERIODS,Maintenance_Time_HOURS)], vFMDOWN[y,t] == sum(vFMSHUT[y,e] for e=(t-by_rid(y,:Maintenance_Time)):t)
-
-				# cMaintenanceTimeWrap: If n is greater than the number of subperiods left in the period, constraint wraps around to first hour of time series
-				# cMaintenanceTimeWrap
-				[t in Maintenance_Time_HOURS], vFMDOWN[y,t] == sum(vFMSHUT[y,e] for e=(t-((t%hours_per_subperiod)-1):t))+sum(vFMSHUT[y,e] for e=((t+hours_per_subperiod-(t%hours_per_subperiod))-(by_rid(y,:Maintenance_Time)-(t%hours_per_subperiod))):(t+hours_per_subperiod-(t%hours_per_subperiod)))
-
-				# cMaintenanceTimeStart:
-				[t in START_SUBPERIODS], vFMDOWN[y,t] == vFMSHUT[y,t]+sum(vFMSHUT[y,e] for e=((t+hours_per_subperiod-1)-(by_rid(y,:Maintenance_Time)-1)):(t+hours_per_subperiod-1))
-
-				#Require maintenance at least once per year per core
-				sum(vFMSHUT[y,t]*inputs["omega"][t] for t in 1:T) >= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
-
-			end)
+			maintenance_time[y] = Int(floor(by_rid(y,:Maintenance_Time)))
 		end
+		@constraint(EP, [y in MAINTENANCE, t in 1:T],
+			vFMDOWN[y,t] == sum(vFMSHUT[y, hoursbefore(p, t, 1:maintenance_time[y])])
+		)
+		@constraint(EP, [y in MAINTENANCE],
+			sum(vFMSHUT[y,t]*inputs["omega"][t] for t in 1:T) >= EP[:vCCAP][y] / by_rid(y,:Cap_Size))
 	else
 		@constraint(EP, [y in FUS, t=1:T], vFMDOWN[y,t] == 0)
 	end
