@@ -36,6 +36,7 @@ function thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 
 	dfGen = inputs["dfGen"]
 
+	G = inputs["G"]     # Number of resources (generators, storage, DR, and DERs)
 	T = inputs["T"]     # Number of time steps (hours)
 	Z = inputs["Z"]     # Number of zones
 
@@ -49,6 +50,11 @@ function thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 
 	function by_rid(rid::Integer, sym::Symbol)
 		return dfTS[dfTS.R_ID .== rid, sym][]
+	end
+
+	function by_rid(rid::Vector{Int}, sym::Symbol)
+		indices = [findall(x -> x == y, dfTS.R_ID)[] for y in rid]
+		return dfTS[indices, sym]
 	end
 
 	@variables(EP, begin
@@ -69,8 +75,20 @@ function thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 	@constraint(EP, cCCAPMax[y in those_with_max_cap], vCCAP[y] <= by_rid(y, :Max_Cap_MW_th))
 	#System-wide installed capacity is less than a specified maximum limit
 	FIRST_ROW = 1
-	if dfTS[FIRST_ROW, :System_Max_Cap_MWe_net] >= 0
-		@constraint(EP, cCSystemTot, sum(vCCAP[y] * dfGen[y,:Eff_Down] * (1 - by_rid(y,:Dwell_Time)/by_rid(y,:Max_Up) - by_rid(y,:Recirc_Pass) - by_rid(y,:Recirc_Act) - by_rid(y,:Start_Energy)/by_rid(y,:Max_Up)) for y in TS) == dfTS[FIRST_ROW, :System_Max_Cap_MWe_net])
+	system_max_cap_mwe_net = dfTS[FIRST_ROW, :System_Max_Cap_MWe_net]
+	if system_max_cap_mwe_net  >= 0
+		has_max_up = dfTS[by_rid(TS, :Max_Up) .> 0, :R_ID]
+
+		active_frac = ones(G)
+		avg_start_power = zeros(G)
+		net_th_frac = ones(G)
+		net_el_factor = zeros(G)
+
+		active_frac[has_max_up] .= 1 .- by_rid(has_max_up,:Dwell_Time) ./ by_rid(has_max_up,:Max_Up)
+		avg_start_power[has_max_up] .= by_rid(has_max_up,:Start_Energy) ./ by_rid(has_max_up,:Max_Up)
+		net_th_frac[TS] .= active_frac[TS] .- by_rid(TS,:Recirc_Pass) .- by_rid(TS,:Recirc_Act) .- avg_start_power[TS]
+		net_el_factor[TS] .= dfGen[TS,:Eff_Down] .* net_th_frac[TS]
+		@constraint(EP, cCSystemTot, sum(vCCAP[TS] .* net_el_factor[TS]) == system_max_cap_mwe_net)
 	end
 
 
