@@ -376,6 +376,13 @@ function hoursbefore(p::Int, t::Int, b::Int)::Int
 	return period * p + mod1(t - b, p)
 end
 
+@doc raw"""
+    hoursbefore(p::Int, t::Int, b::UnitRange)
+
+This is a generalization of hoursbefore(... b::Int)
+to allow for example b=1:3 to fetch a Vector{Int} of the three hours before
+time index t.
+"""
 function hoursbefore(p::Int, t::Int, b::UnitRange{Int})::Vector{Int}
 	period = div(t - 1, p)
 	return period * p .+ mod1.(t .- b, p)
