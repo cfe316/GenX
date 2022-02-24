@@ -86,7 +86,7 @@ function thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 
 		active_frac[has_max_up] .= 1 .- by_rid(has_max_up,:Dwell_Time) ./ by_rid(has_max_up,:Max_Up)
 		avg_start_power[has_max_up] .= by_rid(has_max_up,:Start_Energy) ./ by_rid(has_max_up,:Max_Up)
-		net_th_frac[TS] .= active_frac[TS] .- by_rid(TS,:Recirc_Pass) .- by_rid(TS,:Recirc_Act) .- avg_start_power[TS]
+		net_th_frac[TS] .= active_frac[TS] .* (1 .- by_rid(TS,:Recirc_Act)) .- by_rid(TS,:Recirc_Pass) .- avg_start_power[TS]
 		net_el_factor[TS] .= dfGen[TS,:Eff_Down] .* net_th_frac[TS]
 		@constraint(EP, cCSystemTot, sum(vCCAP[TS] .* net_el_factor[TS]) == system_max_cap_mwe_net)
 	end
