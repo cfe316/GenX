@@ -48,9 +48,7 @@ function thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 	TS = inputs["TS"]
 	dfTS = inputs["dfTS"]
 
-	function by_rid(rid::Integer, sym::Symbol)
-		return dfTS[dfTS.R_ID .== rid, sym][]
-	end
+	by_rid(rid::Integer, sym::Symbol) = dfTS[dfTS.R_ID .== rid, sym][]
 
 	function by_rid(rid::Vector{Int}, sym::Symbol)
 		indices = [findall(x -> x == y, dfTS.R_ID)[] for y in rid]
@@ -73,24 +71,6 @@ function thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 	# Total installed capacity is less than specified maximum limit
 	those_with_max_cap = dfTS[dfTS.Max_Cap_MW_th.>0, :R_ID]
 	@constraint(EP, cCCAPMax[y in those_with_max_cap], vCCAP[y] <= by_rid(y, :Max_Cap_MW_th))
-	#System-wide installed capacity is less than a specified maximum limit
-	FIRST_ROW = 1
-	system_max_cap_mwe_net = dfTS[FIRST_ROW, :System_Max_Cap_MWe_net]
-	if system_max_cap_mwe_net  >= 0
-		has_max_up = dfTS[by_rid(TS, :Max_Up) .> 0, :R_ID]
-
-		active_frac = ones(G)
-		avg_start_power = zeros(G)
-		net_th_frac = ones(G)
-		net_el_factor = zeros(G)
-
-		active_frac[has_max_up] .= 1 .- by_rid(has_max_up,:Dwell_Time) ./ by_rid(has_max_up,:Max_Up)
-		avg_start_power[has_max_up] .= by_rid(has_max_up,:Start_Energy) ./ by_rid(has_max_up,:Max_Up)
-		net_th_frac[TS] .= active_frac[TS] .* (1 .- by_rid(TS,:Recirc_Act)) .- by_rid(TS,:Recirc_Pass) .- avg_start_power[TS]
-		net_el_factor[TS] .= dfGen[TS,:Eff_Down] .* net_th_frac[TS]
-		@constraint(EP, cCSystemTot, sum(vCCAP[TS] .* net_el_factor[TS]) == system_max_cap_mwe_net)
-	end
-
 
 	# Variable cost of core operation
 	# Variable cost at timestep t for thermal core y
@@ -209,6 +189,40 @@ function thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 return EP
 end
 
+function fusion_max_cap_constraint!(EP::Model, inputs::Dict, setup::Dict)
+
+	dfGen = inputs["dfGen"]
+
+	G = inputs["G"]     # Number of resources (generators, storage, DR, and DERs)
+
+	dfTS = inputs["dfTS"]
+
+	FUS =  dfTS[dfTS.FUS.>=1,:R_ID]
+
+	by_rid(r::Vector{Int}, s::Symbol) = dfTS[[findall(x->x==y, dfTS.R_ID)[] for y in r], s]
+
+	#System-wide installed capacity is less than a specified maximum limit
+	has_max_up = dfTS[by_rid(FUS, :Max_Up) .> 0, :R_ID]
+
+	active_frac = ones(G)
+	avg_start_power = zeros(G)
+	net_th_frac = ones(G)
+	net_el_factor = zeros(G)
+
+	active_frac[has_max_up] .= 1 .- by_rid(has_max_up,:Dwell_Time) ./ by_rid(has_max_up,:Max_Up)
+	avg_start_power[has_max_up] .= by_rid(has_max_up,:Start_Energy) ./ by_rid(has_max_up,:Max_Up)
+	net_th_frac[FUS] .= active_frac[FUS] .* (1 .- by_rid(FUS,:Recirc_Act)) .- by_rid(FUS,:Recirc_Pass) .- avg_start_power[FUS]
+	net_el_factor[FUS] .= dfGen[FUS,:Eff_Down] .* net_th_frac[FUS]
+
+	@expression(EP, eCAvgNetElectric[y in FUS], EP[:vCCAP][y] * net_el_factor[y])
+
+	FIRST_ROW = 1
+	system_max_cap_mwe_net = dfTS[FIRST_ROW, :System_Max_Cap_MWe_net]
+	if system_max_cap_mwe_net >= 0
+		@constraint(EP, cCSystemTot, sum(eCAvgNetElectric[FUS]) <= system_max_cap_mwe_net)
+	end
+end
+
 @doc raw"""
     fusion_constraints!(EP::Model, inputs::Dict)
 
@@ -228,9 +242,7 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 	dfTS = inputs["dfTS"]
 	dfGen = inputs["dfGen"]
 
-	function by_rid(rid::Integer, sym::Symbol)
-		return dfTS[dfTS.R_ID .== rid, sym][]
-	end
+	by_rid(rid::Integer, sym::Symbol) = dfTS[dfTS.R_ID .== rid, sym][]
 
 	function by_rid(rid::Vector{Int}, sym::Symbol)
 		indices = [findall(x -> x == y, dfTS.R_ID)[] for y in rid]
@@ -241,6 +253,8 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 
 	MAINTENANCE = intersect(FUS, dfTS[dfTS.Maintenance_Time.>0, :R_ID])
 	sanity_check_maintenance(MAINTENANCE, setup)
+
+	fusion_max_cap_constraint!(EP, inputs, setup)
 
 	# UC variables for the fusion core, analogous to standard UC
 	@variables(EP, begin
