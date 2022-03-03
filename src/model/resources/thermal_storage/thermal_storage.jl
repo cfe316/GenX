@@ -14,6 +14,37 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+function by_rid_df(rid::Integer, sym::Symbol, df::DataFrame)
+	return df[df.R_ID .== rid, sym][]
+end
+
+function by_rid_df(rid::Vector{Int}, sym::Symbol, df::DataFrame)
+	indices = [findall(x -> x == y, df.R_ID)[] for y in rid]
+	return df[indices, sym]
+end
+
+function get_fus(inputs::Dict)::Vector{Int}
+	dfTS = inputs["dfTS"]
+	dfTS[dfTS.FUS.>=1,:R_ID]
+end
+
+function get_nonfus(inputs::Dict)::Vector{Int}
+	dfTS = inputs["dfTS"]
+	dfTS[dfTS.FUS.==0,:R_ID]
+end
+
+function get_maintenance(inputs::Dict)::Vector{Int}
+	dfTS = inputs["dfTS"]
+	FUS = get_fus(inputs)
+	intersect(FUS, dfTS[dfTS.Maintenance_Time.>0, :R_ID])
+end
+
+function get_nonmaintenance(inputs::Dict)::Vector{Int}
+	dfTS = inputs["dfTS"]
+	FUS = get_fus(inputs)
+	setdiff(FUS, dfTS[dfTS.Maintenance_Time.>0, :R_ID])
+end
+
 function split_LDS_and_nonLDS(df::DataFrame, inputs::Dict, setup::Dict)
 	TS = inputs["TS"]
 	if setup["OperationWrapping"] == 1
@@ -48,12 +79,7 @@ function thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 	TS = inputs["TS"]
 	dfTS = inputs["dfTS"]
 
-	by_rid(rid::Integer, sym::Symbol) = dfTS[dfTS.R_ID .== rid, sym][]
-
-	function by_rid(rid::Vector{Int}, sym::Symbol)
-		indices = [findall(x -> x == y, dfTS.R_ID)[] for y in rid]
-		return dfTS[indices, sym]
-	end
+	by_rid(rid, sym) = by_rid_df(rid, sym, dfTS)
 
 	@variables(EP, begin
 	# Thermal core variables
@@ -176,10 +202,10 @@ function thermal_storage(EP::Model, inputs::Dict, setup::Dict)
 	@constraint(EP, cTSMaxDur[y in TS], vTSCAP[y] <= dfGen[y,:Max_Duration] * vCCAP[y])
 
 	### FUSION CONSTRAINTS ###
-	FUS =  dfTS[dfTS.FUS.>=1,:R_ID]
+	FUS =  get_fus(inputs)
 
 	# TODO: define expressions & constraints for NONFUS
-	NONFUS =  dfTS[dfTS.FUS.==0,:R_ID]
+	NONFUS =  get_nonfus(inputs)
 
 	# Use fusion constraints if thermal cores tagged 'FUS' are present
 	if !isempty(FUS)
@@ -196,10 +222,9 @@ function fusion_max_cap_constraint!(EP::Model, inputs::Dict, setup::Dict)
 	G = inputs["G"]     # Number of resources (generators, storage, DR, and DERs)
 
 	dfTS = inputs["dfTS"]
+	by_rid(rid, sym) = by_rid_df(rid, sym, dfTS)
 
-	FUS =  dfTS[dfTS.FUS.>=1,:R_ID]
-
-	by_rid(r::Vector{Int}, s::Symbol) = dfTS[[findall(x->x==y, dfTS.R_ID)[] for y in r], s]
+	FUS =  get_fus(inputs)
 
 	#System-wide installed capacity is less than a specified maximum limit
 	has_max_up = dfTS[by_rid(FUS, :Max_Up) .> 0, :R_ID]
@@ -235,23 +260,16 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 	G = inputs["G"]     # Number of resources (generators, storage, DR, and DERs)
 	Z = inputs["Z"]     # Number of zones
 
-	START_SUBPERIODS = inputs["START_SUBPERIODS"]
-	INTERIOR_SUBPERIODS = inputs["INTERIOR_SUBPERIODS"]
 	hours_per_subperiod = inputs["hours_per_subperiod"]
 
 	dfTS = inputs["dfTS"]
 	dfGen = inputs["dfGen"]
 
-	by_rid(rid::Integer, sym::Symbol) = dfTS[dfTS.R_ID .== rid, sym][]
+	by_rid(rid, sym) = by_rid_df(rid, sym, dfTS)
 
-	function by_rid(rid::Vector{Int}, sym::Symbol)
-		indices = [findall(x -> x == y, dfTS.R_ID)[] for y in rid]
-		return dfTS[indices, sym]
-	end
+	FUS = get_fus(inputs)
 
-	FUS =  dfTS[dfTS.FUS.>=1,:R_ID]
-
-	MAINTENANCE = intersect(FUS, dfTS[dfTS.Maintenance_Time.>0, :R_ID])
+	MAINTENANCE = get_maintenance(inputs)
 	sanity_check_maintenance(MAINTENANCE, setup)
 
 	fusion_max_cap_constraint!(EP, inputs, setup)
@@ -261,8 +279,6 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 		vFCOMMIT[y in FUS, t=1:T] >= 0 #core commitment status
 		vFSTART[y in FUS, t=1:T] >= 0 #core startup
 		vFSHUT[y in FUS, t=1:T] >= 0 #core shutdown
-		vFMDOWN[y in FUS, t=1:T] >= 0 #core maintenance status
-		vFMSHUT[y in FUS, t=1:T] >= 0 #core maintenance shutdown
 	end)
 
 	#Declare core integer/binary variables if Integer_Commit is set to 1
@@ -271,8 +287,6 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 			set_integer.(vFCOMMIT[y,:])
 			set_integer.(vFSTART[y,:])
 			set_integer.(vFSHUT[y,:])
-			set_integer.(vFMDOWN[y,:])
-			set_integer.(vFMSHUT[y,:])
 			set_integer.(EP[:vCCAP][y])
 		end
 	end
@@ -282,8 +296,6 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 		[y in FUS, t=1:T], vFCOMMIT[y,t] <= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
 		[y in FUS, t=1:T], vFSTART[y,t] <= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
 		[y in FUS, t=1:T], vFSHUT[y,t] <= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
-		[y in FUS, t=1:T], vFMDOWN[y,t] <= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
-		[y in FUS, t=1:T], vFMSHUT[y,t] <= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
 	end)
 
 	# Commitment state constraint linking startup and shutdown decisions
@@ -327,28 +339,16 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 	@constraint(EP, [y in MAX_UPTIME, t in 1:T],
 		vFCOMMIT[y,t] <= sum(vFSTART[y, hoursbefore(p, t, 1:max_uptime[y])]))
 
-	#require plant to shut down during maintenance
-	@constraint(EP, [y in FUS, t=1:T],
-		EP[:vCCAP][y] / by_rid(y,:Cap_Size) - vFCOMMIT[y,t] >= vFMDOWN[y,t])
-
 	# Maintenance constraints are optional, and are only activated when OperationWrapping is off.
 	# This is to *prevent* these constraints when using TimeDomainReduction, since it would no longer
 	# make sense to have contiguous many-week-long periods which only happen once per year.
-	if setup["OperationWrapping"] == 0 && !isempty(MAINTENANCE)
-		maintenance_time = zeros(Int, G)
-		maintenance_time[MAINTENANCE] .= Int.(floor.(by_rid(MAINTENANCE,:Maintenance_Time)))
-		@constraint(EP, [y in MAINTENANCE, t in 1:T],
-			vFMDOWN[y,t] == sum(vFMSHUT[y, hoursbefore(p, t, 1:maintenance_time[y])]))
-		@constraint(EP, [y in MAINTENANCE],
-			sum(vFMSHUT[y,t]*inputs["omega"][t] for t in 1:T) >= EP[:vCCAP][y] / by_rid(y,:Cap_Size))
+	if !isempty(MAINTENANCE)
+		maintenance_constraints!(EP, inputs, setup)
 	else
-		@constraint(EP, [y in FUS, t=1:T], vFMDOWN[y,t] == 0)
+		# Passive recirculating power, depending on built capacity
+		@expression(EP, ePassiveRecircFus[y in FUS, t=1:T],
+			EP[:vCCAP][y] * dfGen[y,:Eff_Down] * by_rid(y,:Recirc_Pass))
 	end
-
-	# Passive and active recirculating power for each fusion generator
-	# Passive recirculating power, depending on built capacity
-	@expression(EP, ePassiveRecircFus[y in FUS, t=1:T],
-		(EP[:vCCAP][y] - by_rid(y,:Cap_Size) * vFMDOWN[y,t]) * dfGen[y,:Eff_Down] * by_rid(y,:Recirc_Pass))
 
 	# Active recirculating power, depending on committed capacity
 	@expression(EP, eActiveRecircFus[y in FUS, t=1:T],
@@ -360,7 +360,7 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 		by_rid(y,:Cap_Size) * vFSTART[y,t] * dfGen[y,:Eff_Down] * by_rid(y,:Start_Energy))
 	#Total recirculating power at each timestep
 	@expression(EP, eTotalRecircFus[y in FUS, t=1:T],
-		ePassiveRecircFus[y,t] + eActiveRecircFus[y,t] + eStartEnergyFus[y,t])
+		EP[:ePassiveRecircFus][y,t] + eActiveRecircFus[y,t] + eStartEnergyFus[y,t])
 
 	# Total recirculating power from fusion in each zone
 	FUS_IN_ZONE = [intersect(FUS, dfTS[dfTS.Zone .== z, :R_ID]) for z in 1:Z]
@@ -370,8 +370,62 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 	EP[:ePowerBalance] += ePowerBalanceRecircFus
 end
 
+function maintenance_constraints!(EP::Model, inputs::Dict, setup::Dict)
+
+	println("Fusion Core Maintenance Module")
+
+	dfGen = inputs["dfGen"]
+
+	T = inputs["T"]     # Number of time steps (hours)
+	G = inputs["G"]     # Number of resources (generators, storage, DR, and DERs)
+
+	hours_per_subperiod = inputs["hours_per_subperiod"]
+
+	by_rid(rid, sym) = by_rid_df(rid, sym, inputs["dfTS"])
+
+	FUS = get_fus(inputs)
+	MAINTENANCE = get_maintenance(inputs)
+	NONMAINTENANCE = get_nonmaintenance(inputs)
+
+	# UC variables for fusion core maintenance
+	@variables(EP, begin
+		vFMDOWN[y in FUS, t=1:T] >= 0  # core maintenance status
+		vFMSHUT[y in MAINTENANCE, t=1:T] >= 0  # core maintenance shutdown
+	end)
+
+	# No need to set integers for NONMAINTENANCE
+	for y in MAINTENANCE
+		if by_rid(y, :Integer_Commit) == 1
+			set_integer.(vFMDOWN[y,:])
+			set_integer.(vFMSHUT[y,:])
+		end
+	end
+
+	# Upper bounds on optional maintenance variables
+	@constraints(EP, begin
+		[y in NONMAINTENANCE, t=1:T], vFMDOWN[y,t] == 0
+		[y in MAINTENANCE, t=1:T], vFMDOWN[y,t] <= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
+		[y in MAINTENANCE, t=1:T], vFMSHUT[y,t] <= EP[:vCCAP][y] / by_rid(y,:Cap_Size)
+	end)
+
+	# Require plant to shut down during maintenance
+	@constraint(EP, [y in MAINTENANCE, t=1:T],
+		EP[:vCCAP][y] / by_rid(y,:Cap_Size) - EP[:vFCOMMIT][y,t] >= vFMDOWN[y,t])
+
+	maint = zeros(Int, G)
+	maint[MAINTENANCE] .= Int.(floor.(by_rid(MAINTENANCE, :Maintenance_Time)))
+	@constraint(EP, [y in MAINTENANCE, t in 1:T],
+		EP[:vFMDOWN][y,t] == sum(EP[:vFMSHUT][y, hoursbefore(hours_per_subperiod, t, 1:maint[y])]))
+	@constraint(EP, [y in MAINTENANCE],
+		sum(EP[:vFMSHUT][y,t]*inputs["omega"][t] for t in 1:T) >= EP[:vCCAP][y] / by_rid(y,:Cap_Size))
+
+	# Passive recirculating power, depending on built capacity
+	@expression(EP, ePassiveRecircFus[y in FUS, t=1:T],
+		(EP[:vCCAP][y] - by_rid(y,:Cap_Size) * EP[:vFMDOWN][y,t]) * dfGen[y,:Eff_Down] * by_rid(y,:Recirc_Pass))
+end
+
+
 function sanity_check_maintenance(MAINTENANCE::Vector{Int}, setup::Dict)
-	println("Performing sanity check")
 	ow = setup["OperationWrapping"]
 	tdr = setup["TimeDomainReduction"]
 
