@@ -337,7 +337,7 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 	# be committed unless it has been started at some point in
 	# the previous n timesteps
 	@constraint(EP, [y in MAX_UPTIME, t in 1:T],
-		vFCOMMIT[y,t] <= sum(vFSTART[y, hoursbefore(p, t, 1:max_uptime[y])]))
+			vFCOMMIT[y,t] <= sum(vFSTART[y, hoursbefore(p, t, 0:(max_uptime[y]-1))]))
 
 	# Maintenance constraints are optional, and are only activated when OperationWrapping is off.
 	# This is to *prevent* these constraints when using TimeDomainReduction, since it would no longer
@@ -415,7 +415,7 @@ function maintenance_constraints!(EP::Model, inputs::Dict, setup::Dict)
 	maint = zeros(Int, G)
 	maint[MAINTENANCE] .= Int.(floor.(by_rid(MAINTENANCE, :Maintenance_Time)))
 	@constraint(EP, [y in MAINTENANCE, t in 1:T],
-		EP[:vFMDOWN][y,t] == sum(EP[:vFMSHUT][y, hoursbefore(hours_per_subperiod, t, 1:maint[y])]))
+			EP[:vFMDOWN][y,t] == sum(EP[:vFMSHUT][y, hoursbefore(hours_per_subperiod, t, 0:(maint[y]-1))]))
 	@constraint(EP, [y in MAINTENANCE],
 		sum(EP[:vFMSHUT][y,t]*inputs["omega"][t] for t in 1:T) >= EP[:vCCAP][y] / by_rid(y,:Cap_Size))
 
