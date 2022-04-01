@@ -35,14 +35,38 @@ end
 
 function get_maintenance(inputs::Dict)::Vector{Int}
 	dfTS = inputs["dfTS"]
-	FUS = get_fus(inputs)
-	intersect(FUS, dfTS[dfTS.Maintenance_Time.>0, :R_ID])
+	if "MAINT" in names(dfTS)
+		FUS = get_fus(inputs)
+		intersect(FUS, dfTS[dfTS.MAINT.>0, :R_ID])
+	else
+		Vector{Int}[]
+	end
+end
+
+function get_maintenance_with_formulation(inputs::Dict, form::Int)::Vector{Int}
+	MAINTENANCE = get_maintenance(inputs)
+	if !isempty(MAINTENANCE)
+		dfTS = inputs["dfTS"]
+		intersect(MAINTENANCE, dfTS[dfTS.MAINT.==form, :R_ID])
+	else
+		Vector{Int}[]
+	end
+end
+
+function get_yearly_maintenance(inputs::Dict)::Vector{Int}
+	YEARLY_MAINT = 1
+	get_maintenance_with_formulation(inputs, YEARLY_MAINT)
+end
+
+function get_usage_based_maintenance(inputs::Dict)::Vector{Int}
+	USAGE_BASED_MAINT = 2
+	get_maintenance_with_formulation(inputs, USAGE_BASED_MAINT)
 end
 
 function get_nonmaintenance(inputs::Dict)::Vector{Int}
-	dfTS = inputs["dfTS"]
 	FUS = get_fus(inputs)
-	setdiff(FUS, dfTS[dfTS.Maintenance_Time.>0, :R_ID])
+	MAINT = get_maintenance(inputs)
+	setdiff(FUS, MAINT)
 end
 
 function split_LDS_and_nonLDS(df::DataFrame, inputs::Dict, setup::Dict)
@@ -385,7 +409,12 @@ function maintenance_constraints!(EP::Model, inputs::Dict, setup::Dict)
 
 	FUS = get_fus(inputs)
 	MAINTENANCE = get_maintenance(inputs)
+	YEARLY_MAINTENANCE = get_yearly_maintenance(inputs)
+	USAGE_BASED_MAINTENANCE = get_usage_based_maintenance(inputs)
+
 	NONMAINTENANCE = get_nonmaintenance(inputs)
+
+	omega = inputs["omega"]
 
 	# UC variables for fusion core maintenance
 	@variables(EP, begin
@@ -412,12 +441,15 @@ function maintenance_constraints!(EP::Model, inputs::Dict, setup::Dict)
 	@constraint(EP, [y in MAINTENANCE, t=1:T],
 		EP[:vCCAP][y] / by_rid(y,:Cap_Size) - EP[:vFCOMMIT][y,t] >= vFMDOWN[y,t])
 
-	maint = zeros(Int, G)
-	maint[MAINTENANCE] .= Int.(floor.(by_rid(MAINTENANCE, :Maintenance_Time)))
+	maint_dur = zeros(Int, G)
+	maint_dur[MAINTENANCE] .= Int.(floor.(by_rid(MAINTENANCE, :Maintenance_Duration_Hours)))
 	@constraint(EP, [y in MAINTENANCE, t in 1:T],
-			EP[:vFMDOWN][y,t] == sum(EP[:vFMSHUT][y, hoursbefore(hours_per_subperiod, t, 0:(maint[y]-1))]))
-	@constraint(EP, [y in MAINTENANCE],
-		sum(EP[:vFMSHUT][y,t]*inputs["omega"][t] for t in 1:T) >= EP[:vCCAP][y] / by_rid(y,:Cap_Size))
+			EP[:vFMDOWN][y,t] == sum(EP[:vFMSHUT][y, hoursbefore(hours_per_subperiod, t, 0:(maint_dur[y]-1))]))
+
+	@constraint(EP, [y in YEARLY_MAINTENANCE],
+		sum(EP[:vFMSHUT][y,t]*omega[t] for t in 1:T) >= EP[:vCCAP][y] / by_rid(y,:Maintenance_Cadence_Years) / by_rid(y,:Cap_Size))
+	@constraint(EP, [y in USAGE_BASED_MAINTENANCE],
+		sum(EP[:vFMSHUT][y,t]*omega[t] for t in 1:T) >= sum(EP[:vCP][y,t]*omega[t] for t in 1:T) / by_rid(y,:Full_Power_Hours_Until_Maintenance) / by_rid(y,:Cap_Size))
 
 	# Passive recirculating power, depending on built capacity
 	@expression(EP, ePassiveRecircFus[y in FUS, t=1:T],
@@ -431,7 +463,7 @@ function sanity_check_maintenance(MAINTENANCE::Vector{Int}, setup::Dict)
 
 	is_maint_reqs = !isempty(MAINTENANCE)
 	if (ow > 0 || tdr > 0) && is_maint_reqs
-		println("Resources ", MAINTENANCE, " have Maintenance_Time > 0,")
+		println("Resources ", MAINTENANCE, " have MAINT > 0,")
 		println("but also OperationWrapping (", ow, ") or TimeDomainReduction (", tdr, ").")
 		println("These are incompatible with a Maintenance requirement.")
 		error("Incompatible GenX settings and maintenance requirements.")
