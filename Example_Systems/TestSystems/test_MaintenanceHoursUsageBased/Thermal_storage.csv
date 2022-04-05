@@ -1,0 +1,2 @@
+System_Max_Cap_MWe_net,region,cluster,Resource,Resource_Type,MAINT,Maintenance_Duration_Hours,Full_Power_Hours_Until_Maintenance,FUS,R_ID,Zone,Cap_Size,Integer_Commit,Max_Starts,Min_Power,Max_Cap_MW_th,Max_Up,Dwell_Time,Recirc_Pass,Recirc_Act,Start_Power,Start_Energy,Fixed_Cost_per_MW_th,Var_OM_Cost_per_MWh_th,Max_Generator_Core_Power_Ratio,Min_Generator_Core_Power_Ratio,Fixed_Cost_per_MWh_th
+-1,NE,1,fusion,fusion,2,4,20,1,2,1,1,1,-1,0.0,-1,-1,0.0,0.0,0.0,0.0,0.0,0,10,1.0,1.0,0

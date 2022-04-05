@@ -1,0 +1,4 @@
+Resource,Zone,StartCap,RetCap,NewCap,EndCap,StartEnergyCap,RetEnergyCap,NewEnergyCap,EndEnergyCap,StartChargeCap,RetChargeCap,NewChargeCap,EndChargeCap
+dummy_storage,1,0,0.0,0.0,0.0,0,0.0,0.0,0.0,0,0.0,0.0,0.0
+fusion,1,1,0.9999999999999999,0.9999999999999998,0.9999999999999999,0,0.0,0.0,0.0,0,0.0,0.0,0.0
+Total,n/a,1,0.9999999999999999,0.9999999999999998,0.9999999999999999,0,0.0,0.0,0.0,0,0.0,0.0,0.0
