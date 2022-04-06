@@ -63,7 +63,7 @@ function cap_reserve_margin(EP::Model, inputs::Dict, setup::Dict)
 				  sum(dfGen[y,Symbol("CapRes_$res")] * EP[:eTotalCap][y] for y in THERM_ALL) # including thermal generator
 				- sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:eTotalCap][y] 
 														- EP[:vP][y,t]  
-														+ by_rid(dfTS, y, :Cap_Size) * EP[:vFSTART][y,t]*dfGen[y,:Eff_Up]*by_rid(dfTS, y, :Start_Power)
+														+ by_rid(dfTS, y, :Cap_Size) * EP[:vFSTART][y,t]*dfGen[y,:Eff_Down]*by_rid(dfTS, y, :Start_Power)
 														+ EP[:ePassiveRecircFus][y,t]
 														+ EP[:eActiveRecircFus][y,t]) for y in TS)
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:vP][y,t] - EP[:vCHARGE][y,t])  for y in STOR_ALL) # including storage
@@ -79,7 +79,7 @@ function cap_reserve_margin(EP::Model, inputs::Dict, setup::Dict)
 				  sum(dfGen[y,Symbol("CapRes_$res")] * EP[:eTotalCap][y] for y in THERM_ALL) # including thermal generator
 				- sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:eTotalCap][y] 
 				  										- EP[:vP][y,t]  
-														+ by_rid(dfTS, y, :Cap_Size)*EP[:vFSTART][y,t]*dfGen[y,:Eff_Up]*by_rid(dfTS, y, :Start_Power)
+														+ by_rid(dfTS, y, :Cap_Size)*EP[:vFSTART][y,t]*dfGen[y,:Eff_Down]*by_rid(dfTS, y, :Start_Power)
 				 										+ EP[:ePassiveRecircFus][y,t]
 				  										+ EP[:eActiveRecircFus][y,t]) for y in TS)
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:vP][y,t] - EP[:vCHARGE][y,t])  for y in STOR_ALL) # including storage
@@ -96,7 +96,7 @@ function cap_reserve_margin(EP::Model, inputs::Dict, setup::Dict)
 				  sum(dfGen[y,Symbol("CapRes_$res")] * EP[:eTotalCap][y] for y in THERM_ALL) # including thermal generator
 				- sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:eTotalCap][y] 
 				  										- EP[:vP][y,t]  
-														+ by_rid(dfTS, y, :Cap_Size)*EP[:vFSTART][y,t]*dfGen[y,:Eff_Up]*by_rid(dfTS, y, :Start_Power)
+														+ by_rid(dfTS, y, :Cap_Size)*EP[:vFSTART][y,t]*dfGen[y,:Eff_Down]*by_rid(dfTS, y, :Start_Power)
 				 										+ EP[:ePassiveRecircFus][y,t]
 				  										+ EP[:eActiveRecircFus][y,t]) for y in TS)
 				+ sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:vP][y,t] - EP[:vCHARGE][y,t])  for y in STOR_ALL) # including storage
@@ -111,7 +111,7 @@ function cap_reserve_margin(EP::Model, inputs::Dict, setup::Dict)
 				  sum(dfGen[y,Symbol("CapRes_$res")] * EP[:eTotalCap][y] for y in THERM_ALL) # including thermal generator
 				- sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:eTotalCap][y] 
 				  										- EP[:vP][y,t]  
-														+ by_rid(dfTS, y, :Cap_Size)*EP[:vFSTART][y,t]*dfGen[y,:Eff_Up]*by_rid(dfTS, y, :Start_Power)
+														+ by_rid(dfTS, y, :Cap_Size)*EP[:vFSTART][y,t]*dfGen[y,:Eff_Down]*by_rid(dfTS, y, :Start_Power)
 				 										+ EP[:ePassiveRecircFus][y,t]
 				  										+ EP[:eActiveRecircFus][y,t]) for y in TS)
 				  + sum(dfGen[y,Symbol("CapRes_$res")] * (EP[:vP][y,t] - EP[:vCHARGE][y,t])  for y in STOR_ALL) # including storage
