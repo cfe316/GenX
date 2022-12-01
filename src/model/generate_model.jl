@@ -185,6 +185,11 @@ function generate_model(setup::Dict,inputs::Dict,OPTIMIZER::MOI.OptimizerWithAtt
 	# Model constraints, variables, expressions related to the co-located VRE-storage resources
 	if !isempty(inputs["VRE_STOR"])
 		vre_stor!(EP, inputs, setup)
+    end
+
+	# Model constraints, variables, expressions related to thermal+storage resources
+	if !isempty(inputs["TS"])
+		EP = thermal_storage(EP, inputs, setup)
 	end
 
 	# Policies
