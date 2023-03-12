@@ -26,7 +26,7 @@ function check_thermal_storage_validity(df::DataFrame)
 
 	c = ts .& .!is_nonzero(df, :THERM)
 	if any(c)
-		e = string("Generators ", r_id[c], ", marked as TS, do not also have THERM=1")
+		e = string("Generators ", r_id[c], ", marked as TS, do not also have THERM != 0")
 		push!(error_strings, e)
 	end
 
@@ -330,13 +330,19 @@ function load_thermal_storage_data!(setup::Dict, path::AbstractString, inputs_ge
 		ts_in = DataFrame(CSV.File(joinpath(path,"Thermal_storage.csv"), header=true), copycols=true)
 
 		if setup["ParameterScale"] == 1
-			columns_to_scale = [:System_Max_Cap_MWe_net,
-								:Cap_Size,
-								:Max_Cap_MW_th,
-								:Fixed_Cost_per_MW_th,
-								:Var_OM_Cost_per_MWh_th,
-								:Fixed_Cost_per_MWh_th]
-			ts_in[!, columns_to_scale] ./= ModelScalingFactor
+			columns_to_scale = ["System_Max_Cap_MWe_net",
+								"Nonfus_System_Max_Cap_MWe",
+								"Cap_Size",
+								"Max_Cap_MW_th",
+								"Fixed_Cost_per_MW_th",
+								"Var_OM_Cost_per_MWh_th",
+								"Fixed_Cost_per_MWh_th",
+								"Fixed_Cost_per_MW_RH"]
+			for column in columns_to_scale
+				if column in names(ts_in)
+					ts_in[!, Symbol(column)] ./= ModelScalingFactor
+				end
+			end
 		end
 		inputs_gen["dfTS"] = ts_in
 		println("Thermal_storage.csv Successfully Read!")
