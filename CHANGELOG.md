@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Capability to use run_timedomainreduction! on multistage problems (#443)
 - Added a description of how to use time domain reduction (#426).
 - Validation: against trying to perform time domain reduction (clustering)
   on data which has already been clustered.
