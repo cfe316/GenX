@@ -52,7 +52,8 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
 	elapsed_time_storage = @elapsed write_storage(path, inputs, setup, EP)
 	println("Time elapsed for writing storage is")
 	println(elapsed_time_storage)
-	dfCurtailment = write_curtailment(path, inputs, setup, EP)
+	elapsed_time_curtailment = @elapsed dfCurtailment = write_curtailment(path, inputs, setup, EP)
+	println("Time elapsed for writing curtailment is\n", elapsed_time_curtailment)
 	elapsed_time_nse = @elapsed write_nse(path, inputs, setup, EP)
 	println("Time elapsed for writing nse is")
 	println(elapsed_time_nse)
@@ -118,7 +119,8 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
 	end
 
 	if !isempty(inputs["TS"])
-		write_thermal_storage(path,inputs,setup,EP)
+		elapsed_time_thermal_storage = @elapsed write_thermal_storage(path,inputs,setup,EP)
+		println("Time elapsed for writing thermal storage is\n", elapsed_time_thermal_storage)
 	end
 
 	# Output additional variables related inter-period energy transfer via storage
@@ -189,7 +191,6 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
 		if setup["MinCapReq"] == 1 && has_duals(EP) == 1
 			dfMinCapReq = write_minimum_capacity_requirement(path, inputs, setup, EP)
 		end
-
 		if setup["MaxCapReq"] == 1 && has_duals(EP) == 1
 			dfMaxCapReq = write_maximum_capacity_requirement(path, inputs, setup, EP)
 		end
@@ -201,7 +202,6 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
 			end
 		end
 
-
 		elapsed_time_net_rev = @elapsed write_net_revenue(path, inputs, setup, EP, dfCap, dfESRRev, dfResRevenue, dfChargingcost, dfPower, dfEnergyRevenue, dfSubRevenue, dfRegSubRevenue, dfVreStor)
 	  	println("Time elapsed for writing net revenue is")
 	  	println(elapsed_time_net_rev)
@@ -210,5 +210,4 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
 	println("Wrote outputs to $path")
 
 	return path
-
 end # END output()
