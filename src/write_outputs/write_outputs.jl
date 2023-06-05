@@ -119,8 +119,7 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
 	end
 
 	if !isempty(inputs["TS"])
-		elapsed_time_thermal_storage = @elapsed write_thermal_storage(path,inputs,setup,EP)
-		println("Time elapsed for writing thermal storage is\n", elapsed_time_thermal_storage)
+		write_thermal_storage(path,inputs,setup,EP)
 	end
 
 	# Output additional variables related inter-period energy transfer via storage
