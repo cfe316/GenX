@@ -189,7 +189,7 @@ function generate_model(setup::Dict,inputs::Dict,OPTIMIZER::MOI.OptimizerWithAtt
 
 	# Model constraints, variables, expressions related to thermal+storage resources
 	if !isempty(inputs["TS"])
-		EP = thermal_storage(EP, inputs, setup)
+		thermal_storage!(EP, inputs, setup)
 	end
 
 	# Policies
