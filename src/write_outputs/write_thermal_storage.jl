@@ -105,11 +105,11 @@ end
 
 function write_thermal_storage_system_max_dual(EP::Model, inputs::Dict, setup::Dict, filename::AbstractString, scale_factor)
     dfTS = inputs["dfTS"]
-    FUS = dfTS[dfTS.FUS .== 1, :R_ID]
+    FUSION = dfTS[dfTS.FUSION .== 1, :R_ID]
     CONV = get_conventional_thermal_core(inputs)
 
     #fusion limit
-    if !isempty(FUS)
+    if !isempty(FUSION)
         FIRST_ROW = 1
         if dfTS[FIRST_ROW, :System_Max_Cap_MWe_net] >= 0
             val = -1*dual.(EP[:cCSystemTot])
@@ -136,11 +136,11 @@ end
 function write_thermal_storage_capacity_duals(EP::Model, inputs::Dict, setup::Dict, filename::AbstractString, scale_factor)
     dfTS = inputs["dfTS"]
     TS = inputs["TS"]
-    NONFUS = get_conventional_thermal_core(inputs)
+    NONFUSION = get_conventional_thermal_core(inputs)
 
-    if !isempty(NONFUS)
+    if !isempty(NONFUSION)
         HAS_MAX_LIMIT = dfTS[dfTS.Max_Cap_MW_th .>= 0, :R_ID]
-        intersect!(HAS_MAX_LIMIT, NONFUS)
+        intersect!(HAS_MAX_LIMIT, NONFUSION)
         resources = by_rid_df(HAS_MAX_LIMIT, :Resource, dfTS)
         n_max = length(HAS_MAX_LIMIT)
         vals = zeros(n_max)
@@ -209,7 +209,7 @@ function write_thermal_storage(path::AbstractString, inputs::Dict, setup::Dict, 
 
     ### LOAD RELEVANT SETS ###
     RH = get_resistive_heating(inputs)
-    FUS = get_fus(inputs)
+    FUSION = get_fus(inputs)
 
     ### CORE POWER TIME SERIES ###
     write_scaled_values(EP, inputs, TS, :vCP, joinpath(path, "TS_CorePwr.csv"), scale_factor)
@@ -223,9 +223,9 @@ function write_thermal_storage(path::AbstractString, inputs::Dict, setup::Dict, 
     end
 
     ### FUSION-SPECIFIC OUTPUTS ###
-    if !isempty(FUS)
+    if !isempty(FUSION)
         ### RECIRCULATING POWER TIME SERIES ###
-        write_scaled_values(EP, inputs, FUS, :eTotalRecircFus, joinpath(path, "TS_fusion_recirc.csv"), scale_factor)
+        write_scaled_values(EP, inputs, FUSION, :eTotalRecircFus, joinpath(path, "TS_fusion_recirc.csv"), scale_factor)
     end
 
     MAINT = get_maintenance(inputs)
@@ -234,7 +234,7 @@ function write_thermal_storage(path::AbstractString, inputs::Dict, setup::Dict, 
         write_core_commitments(EP, inputs, MAINT, :vMSHUT, joinpath(path, "TS_maintshut.csv"))
     end
 
-    ### NON FUS CORE STARTS, SHUTS, COMMITS ###
+    ### CORE STARTS, SHUTS, COMMITS ###
     if setup["UCommit"] > 0
         write_core_commitments(EP, inputs, TS, :vCSTART, joinpath(path, "TS_start.csv"))
         write_core_commitments(EP, inputs, TS, :vCSHUT, joinpath(path, "TS_shut.csv"))

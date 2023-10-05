@@ -1,6 +1,6 @@
 function get_conventional_thermal_core(inputs::Dict)::Vector{Int}
     dfTS = inputs["dfTS"]
-    dfTS[dfTS.FUS.==0,:R_ID]
+    dfTS[dfTS.FUSION.==0,:R_ID]
 end
 
 function get_resistive_heating(inputs::Dict)::Vector{Int}
@@ -60,21 +60,21 @@ function thermal_storage!(EP::Model, inputs::Dict, setup::Dict)
     end
 
     ### FUSION CONSTRAINTS ###
-    FUS = resources_with_fusion(inputs)
+    FUSION = resources_with_fusion(inputs)
 
-    if !isempty(FUS)
+    if !isempty(FUSION)
         fusion_average_net_electric_power_expression!(EP, inputs)
         fusion_systemwide_max_cap_constraint!(EP, inputs)
         fusion_constraints!(EP, inputs, setup)
     end
 
-    MAINTENANCE = get_maintenance(inputs)
+    MAINTENANCE = resources_with_maintenance(inputs)
     if !isempty(MAINTENANCE)
         sanity_check_maintenance(MAINTENANCE, inputs)
         maintenance_constraints!(EP, inputs, setup)
     end
 
-    if !isempty(intersect(MAINTENANCE, FUS))
+    if !isempty(intersect(MAINTENANCE, FUSION))
         maintenance_fusion_modification!(EP, inputs)
     end
 
@@ -112,12 +112,12 @@ function thermal_storage_core_commit!(EP::Model, inputs::Dict, setup::Dict)
     dfTS = inputs["dfTS"]
     T = 1:inputs["T"]
     CONV = get_conventional_thermal_core(inputs)
-    FUS =  resources_with_fusion(inputs)
+    FUSION =  resources_with_fusion(inputs)
     THERM_COMMIT = inputs["THERM_COMMIT"]
     p = inputs["hours_per_subperiod"]
 
     CONV_COMMIT = intersect(THERM_COMMIT, CONV)
-    set = union(FUS, CONV_COMMIT)
+    set = union(FUSION, CONV_COMMIT)
 
     by_rid(rid, sym) = by_rid_df(rid, sym, dfTS)
 
@@ -458,7 +458,7 @@ function thermal_storage_capacity_reserve_margin!(EP::Model, inputs::Dict)
     capresfactor(res, y) = dfGen[y, Symbol("CapRes_$res")]
 
     TS = inputs["THERM_STOR"]
-    FUS = resources_with_fusion(inputs)
+    FUSION = resources_with_fusion(inputs)
     CONV = get_conventional_thermal_core(inputs)
     MAINTENANCE = get_maintenance(inputs)
 
@@ -474,16 +474,16 @@ function thermal_storage_capacity_reserve_margin!(EP::Model, inputs::Dict)
     @expression(EP, eCapResMarBalanceFusionAdjustment[res in reserves, t in T],
                 sum(capresfactor(res, y) * (- EP[:eStartPowerFus][t,y]
                                             - EP[:ePassiveRecircFus][t,y]
-                                            - EP[:eActiveRecircFus][t,y]) for y in FUS))
+                                            - EP[:eActiveRecircFus][t,y]) for y in FUSION))
 
     EP[:eCapResMarBalance] += eCapResMarBalanceFusionAdjustment
 
     # remove plants from contributing while they are under maintenance
-    FUS_MAINT = intersect(FUS, MAINTENANCE)
-    if !isempty(FUS_MAINT)
+    FUSION_MAINT = intersect(FUSION, MAINTENANCE)
+    if !isempty(FUSION_MAINT)
         avg_net_el_fus(y) = dfGen[y, :Average_Net_Electric_Factor] * by_rid(y, :Cap_Size)
         @expression(EP, eCapResMarBalanceFusionMaintAdj[res in reserves, t in T],
-                    -sum(capresfactor(res, y) * EP[:vMDOWN][t, y] * avg_net_el_fus(y) for y in FUS_MAINT))
+                    -sum(capresfactor(res, y) * EP[:vMDOWN][t, y] * avg_net_el_fus(y) for y in FUSION_MAINT))
         EP[:eCapResMarBalance] += eCapResMarBalanceFusionMaintAdj
     end
 
