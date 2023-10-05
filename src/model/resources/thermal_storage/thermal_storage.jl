@@ -1,19 +1,3 @@
-"""
-GenX: An Configurable Capacity Expansion Model
-Copyright (C) 2021,  Massachusetts Institute of Technology
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-A complete copy of the GNU General Public License v2 (GPLv2) is available
-in LICENSE.txt.  Users uncompressing this from an archive may not have
-received this license file.  If not, see <http://www.gnu.org/licenses/>.
-"""
-
 function get_conventional_thermal_core(inputs::Dict)::Vector{Int}
     dfTS = inputs["dfTS"]
     dfTS[dfTS.FUS.==0,:R_ID]
@@ -30,7 +14,7 @@ end
 
 function split_LDS_and_nonLDS(inputs::Dict)
     df = inputs["dfGen"]
-    TS = inputs["TS"]
+    TS = inputs["THERM_STOR"]
     rep_periods = inputs["REP_PERIOD"]
     if rep_periods > 1
         TS_and_LDS = intersect(TS, df[df.LDS.==1,:R_ID])
@@ -76,7 +60,7 @@ function thermal_storage!(EP::Model, inputs::Dict, setup::Dict)
     end
 
     ### FUSION CONSTRAINTS ###
-    FUS =  resources_with_fusion(inputs)
+    FUS = resources_with_fusion(inputs)
 
     if !isempty(FUS)
         fusion_average_net_electric_power_expression!(EP, inputs)
@@ -107,7 +91,7 @@ end
 
 function thermal_storage_base_variables!(EP::Model, inputs::Dict)
     T = 1:inputs["T"]
-    TS = inputs["TS"]
+    TS = inputs["THERMSTOR"]
     RH = get_resistive_heating(inputs)
     @variables(EP, begin
         # Thermal core variables
@@ -177,7 +161,7 @@ end
 
 function thermal_storage_capacity_costs!(EP::Model, inputs::Dict)
     dfTS = inputs["dfTS"]
-    TS = inputs["TS"]
+    TS = inputs["THERMSTOR"]
     RH = get_resistive_heating(inputs)
 
     by_rid(rid, sym) = by_rid_df(rid, sym, dfTS)
@@ -210,7 +194,7 @@ end
 
 function thermal_storage_variable_costs!(EP::Model, inputs::Dict)
     dfTS = inputs["dfTS"]
-    TS = inputs["TS"]
+    TS = inputs["THERM_STOR"]
     T = 1:inputs["T"]
     ω = inputs["omega"]
 
@@ -242,7 +226,7 @@ function thermal_storage_quantity_constraints!(EP::Model, inputs::Dict)
     dfGen = inputs["dfGen"]
     T = 1:inputs["T"]
     p = inputs["hours_per_subperiod"]
-    TS = inputs["TS"]
+    TS = inputs["THERM_STOR"]
     RH = get_resistive_heating(inputs)
     vP = EP[:vP]
     vCP = EP[:vCP]
@@ -358,7 +342,7 @@ end
 
 function thermal_storage_duration_constraints!(EP::Model, inputs::Dict)
     dfGen = inputs["dfGen"]
-    TS = inputs["TS"]
+    TS = inputs["THERM_STOR"]
     vCCAP = EP[:vCCAP]
     vTSCAP = EP[:vTSCAP]
     # Limits on storage duration
@@ -473,7 +457,7 @@ function thermal_storage_capacity_reserve_margin!(EP::Model, inputs::Dict)
     reserves = 1:inputs["NCapacityReserveMargin"]
     capresfactor(res, y) = dfGen[y, Symbol("CapRes_$res")]
 
-    TS = inputs["TS"]
+    TS = inputs["THERM_STOR"]
     FUS = resources_with_fusion(inputs)
     CONV = get_conventional_thermal_core(inputs)
     MAINTENANCE = get_maintenance(inputs)
@@ -517,7 +501,7 @@ function thermal_core_emissions!(EP::Model, inputs::Dict)
     dfTS = inputs["dfTS"]
     dfGen = inputs["dfGen"]
 
-    TS = inputs["TS"]   # R_IDs of resources with thermal storage
+    TS = inputs["THERM_STOR"]   # R_IDs of resources with thermal storage
     G = 1:inputs["G"]
     T = 1:inputs["T"]
     Z = 1:inputs["Z"]
@@ -539,4 +523,46 @@ function thermal_core_emissions!(EP::Model, inputs::Dict)
     @expression(EP, eEmissionsByZoneTS[z in Z, t in T], sum(eEmissionsByPlantTS[y,t] for y in intersect(TS, dfGen[(dfGen[!,:Zone].==z),:R_ID])))
         EP[:eEmissionsByPlant] += eEmissionsByPlantTS
         EP[:eEmissionsByZone] += eEmissionsByZoneTS
+end
+
+@doc raw"""
+    maintenance_formulation_thermal_storage!(EP::Model, inputs::Dict, setup::Dict)
+
+    Creates maintenance variables and constraints for thermal-commit plants.
+"""
+function maintenance_formulation_thermal_storage!(EP::Model, inputs::Dict, setup::Dict)
+
+    @info "Maintenance Module for Thermal-Storage plants"
+
+    ensure_maintenance_variable_records!(inputs)
+    df = inputs["dfTS"]
+    by_rid(rid, sym) = by_rid_df(rid, sym, df)
+
+    MAINT = resources_with_maintenance(df)
+    resource_component(y) = by_rid(y, :Resource)
+    cap(y) = by_rid(y, :Cap_Size)
+    maint_dur(y) = Int(floor(by_rid(y, :Maintenance_Duration)))
+    maint_freq(y) = Int(floor(by_rid(y, :Maintenance_Cycle_Length_Years)))
+    maint_begin_cadence(y) = Int(floor(by_rid(y, :Maintenance_Begin_Cadence)))
+
+    integer_operational_unit_committment = setup["UCommit"] == 1
+
+    vcommit = :vCCOMMIT
+    ecap = :vCCAP
+
+    sanity_check_maintenance(MAINT, inputs)
+
+    for y in MAINT
+        maintenance_formulation!(EP,
+                                inputs,
+                                resource_component(y),
+                                y,
+                                maint_begin_cadence(y),
+                                maint_dur(y),
+                                maint_freq(y),
+                                cap(y),
+                                vcommit,
+                                ecap,
+                                integer_operational_unit_committment)
+    end
 end
