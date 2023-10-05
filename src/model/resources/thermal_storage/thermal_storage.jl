@@ -17,8 +17,9 @@ function split_LDS_and_nonLDS(inputs::Dict)
     TS = inputs["THERM_STOR"]
     rep_periods = inputs["REP_PERIOD"]
     if rep_periods > 1
-        TS_and_LDS = intersect(TS, df[df.LDS.==1,:R_ID])
-        TS_and_nonLDS = intersect(TS, df[df.LDS.!=1,:R_ID])
+        LDS = df[df.LDS.==1, :R_ID]
+        TS_and_LDS = intersect(TS, LDS)
+        TS_and_nonLDS = intersect(TS, LDS)
     else
         TS_and_LDS = Int[]
         TS_and_nonLDS = TS
@@ -91,7 +92,7 @@ end
 
 function thermal_storage_base_variables!(EP::Model, inputs::Dict)
     T = 1:inputs["T"]
-    TS = inputs["THERMSTOR"]
+    TS = inputs["THERM_STOR"]
     RH = get_resistive_heating(inputs)
     @variables(EP, begin
         # Thermal core variables
@@ -161,7 +162,7 @@ end
 
 function thermal_storage_capacity_costs!(EP::Model, inputs::Dict)
     dfTS = inputs["dfTS"]
-    TS = inputs["THERMSTOR"]
+    TS = inputs["THERM__STOR"]
     RH = get_resistive_heating(inputs)
 
     by_rid(rid, sym) = by_rid_df(rid, sym, dfTS)
@@ -378,19 +379,62 @@ end
 
 # TODO make compatible with reserves
 function conventional_thermal_core_constraints!(EP::Model, inputs::Dict, setup::Dict)
+    CONV = get_conventional_thermal_core(inputs)
+    THERM_COMMIT = inputs["THERM_COMMIT"]
+    THERM_NO_COMMIT = inputs["THERM_NO_COMMIT"]
+
+    COMMIT = intersect(THERM_COMMIT, CONV)
+    NON_COMMIT = intersect(THERM_NO_COMMIT, CONV)
+
+    # constraints for generators not subject to UC
+    if !isempty(NON_COMMIT)
+        conventional_thermal_core_no_commit_constraints(EP, inputs)
+    end
+
+    # constraints for generatiors subject to UC
+    if !isempty(COMMIT)
+        conventional_thermal_core_commit_constraints(EP, inputs)
+    end
+end
+
+function conventional_thermal_core_no_commit_constraints!(EP::Model, inputs::Dict)
+
+    T = 1:inputs["T"]     # Number of time steps (hours)
+    p = inputs["hours_per_subperiod"] #total number of hours per subperiod
+
+    CONV = get_conventional_thermal_core(inputs)
+    THERM_NO_COMMIT = inputs["THERM_NO_COMMIT"]
+    set = intersect(THERM_NO_COMMIT, CONV)
+
+    vCP = EP[:vCP]
+    vCCAP = EP[:vCCAP]
 
     dfTS = inputs["dfTS"]
     by_rid(rid, sym) = by_rid_df(rid, sym, dfTS)
+    ramp_up_frac(y) = by_rid(y, :Ramp_Up_Frac)
+    ramp_dn_frac(y) = by_rid(y, :Ramp_Dn_Frac)
+    min_power(y) = by_rid(y, :Min_Power)
+
+    # ramp up and ramp down rates
+    @constraints(EP, begin
+                     [t in T, y in set], vCP[t, y] - vCP[hoursbefore(p, t, 1), y] <= ramp_up_frac(y) * vCCAP[y]
+                     [t in T, y in set], vCP[hoursbefore(p, t, 1), y] - vCP[t,y] <= ramp_dn_frac(y) * vCCAP[y]
+    end)
+
+    # minimum stable power
+    @constraint(EP, [t in T, y in set], vCP[t,y] >= min_power(y) * vCCAP[y])
+end
+
+function conventional_thermal_core_commit_constraints!(EP::Model, inputs::Dict)
 
     T = 1:inputs["T"]     # Number of time steps (hours)
     p = inputs["hours_per_subperiod"] #total number of hours per subperiod
     ω = inputs["omega"]
+
     CONV = get_conventional_thermal_core(inputs)
     THERM_COMMIT = inputs["THERM_COMMIT"]
 
-
-    COMMIT = intersect(THERM_COMMIT, CONV)
-    NON_COMMIT = intersect(inputs["THERM_NO_COMMIT"], CONV)
+    set = intersect(THERM_COMMIT, CONV)
 
     vCP = EP[:vCP]
     vCCAP = EP[:vCCAP]
@@ -398,56 +442,42 @@ function conventional_thermal_core_constraints!(EP::Model, inputs::Dict, setup::
     vCCOMMIT = EP[:vCCOMMIT]
     vCSHUT = EP[:vCSHUT]
 
+    dfTS = inputs["dfTS"]
+    by_rid(rid, sym) = by_rid_df(rid, sym, dfTS)
     cap_size(y) = by_rid(y, :Cap_Size)
     ramp_up_frac(y) = by_rid(y, :Ramp_Up_Frac)
     ramp_dn_frac(y) = by_rid(y, :Ramp_Dn_Frac)
     min_power(y) = by_rid(y, :Min_Power)
 
-    # constraints for generators not subject to UC
-    if !isempty(NON_COMMIT)
-        # ramp up and ramp down rates
-        @constraints(EP, begin
-                         [t in T, y in NON_COMMIT], vCP[t, y] - vCP[hoursbefore(p, t, 1), y] <= ramp_up_frac(y) * vCCAP[y]
-                         [t in T, y in NON_COMMIT], vCP[hoursbefore(p, t, 1), y] - vCP[t,y] <= ramp_dn_frac(y) * vCCAP[y]
-        end)
+    up_time(y) = Int(floor(by_rid(y, :Up_Time)))
+    down_time(y) = Int(floor(by_rid(y, :Down_Time)))
 
-        # minimum stable power
-        @constraint(EP, [t in T, y in NON_COMMIT], vCP[t,y] >= min_power(y) * vCCAP[y])
-    end
+    ### Add startup costs ###
+    @expression(EP, eCStartTS[t in T, y in set], (ω[t] * inputs["TS_C_Start"][y][t] * vCSTART[t, y]))
+    @expression(EP, eTotalCStartTST[t in T], sum(eCStartTS[t,y] for y in set))
+    @expression(EP, eTotalCStartTS, sum(eTotalCStartTST[t] for t in T))
+    EP[:eObj] += eTotalCStartTS
 
-    # constraints for generatiors subject to UC
-    if !isempty(COMMIT)
-        up_time(y) = Int(floor(by_rid(y, :Up_Time)))
-        down_time(y) = Int(floor(by_rid(y, :Down_Time)))
+    #ramp up
+    @constraint(EP,[t in T, y in set],
+                vCP[t,y]-vCP[hoursbefore(p, t, 1), y] <= ramp_up_frac(y)*cap_size(y)*(vCCOMMIT[t,y]-vCSTART[t,y])
+                + min(1, max(min_power(y), ramp_up_frac(y)))*cap_size(y)*vCSTART[t,y]
+                - min_power(y) * cap_size(y) * vCSHUT[t,y])
 
-        ### Add startup costs ###
-        @expression(EP, eCStartTS[t in T, y in COMMIT], (ω[t] * inputs["TS_C_Start"][y][t] * vCSTART[t, y]))
-        @expression(EP, eTotalCStartTST[t in T], sum(eCStartTS[t,y] for y in COMMIT))
-        @expression(EP, eTotalCStartTS, sum(eTotalCStartTST[t] for t in T))
-        EP[:eObj] += eTotalCStartTS
+    #ramp down
+    @constraint(EP,[t in T, y in set],
+                vCP[hoursbefore(p, t, 1), y]-vCP[t,y] <= ramp_dn_frac(y)*cap_size(y)*(vCCOMMIT[t,y]-vCSTART[t,y])
+                - min_power(y)*cap_size(y)*vCSTART[t,y]
+                + min(1,max(min_power(y), ramp_dn_frac(y)))*cap_size(y)*vCSHUT[t,y])
 
+    ### Minimum up and down times
+    @constraint(EP, [t in T, y in set],
+        vCCOMMIT[t,y] >= sum(vCSTART[hoursbefore(p, t, 0:(up_time(y) - 1)), y])
+    )
 
-        #ramp up
-        @constraint(EP,[t in T, y in COMMIT],
-                    vCP[t,y]-vCP[hoursbefore(p, t, 1), y] <= ramp_up_frac(y)*cap_size(y)*(vCCOMMIT[t,y]-vCSTART[t,y])
-                    + min(1, max(min_power(y), ramp_up_frac(y)))*cap_size(y)*vCSTART[t,y]
-                    - min_power(y) * cap_size(y) * vCSHUT[t,y])
-
-        #ramp down
-        @constraint(EP,[t in T, y in COMMIT],
-                    vCP[hoursbefore(p, t, 1), y]-vCP[t,y] <= ramp_dn_frac(y)*cap_size(y)*(vCCOMMIT[t,y]-vCSTART[t,y])
-                    - min_power(y)*cap_size(y)*vCSTART[t,y]
-                    + min(1,max(min_power(y), ramp_dn_frac(y)))*cap_size(y)*vCSHUT[t,y])
-
-        ### Minimum up and down times (Constraints #9-10)
-        @constraint(EP, [t in T, y in COMMIT],
-            vCCOMMIT[t,y] >= sum(vCSTART[hoursbefore(p, t, 0:(up_time(y) - 1)), y])
-        )
-
-        @constraint(EP, [t in T, y in COMMIT],
-            vCCAP[y]/cap_size(y)-vCCOMMIT[t,y] >= sum(vCSHUT[hoursbefore(p, t, 0:(down_time(y) - 1)), y])
-        )
-    end
+    @constraint(EP, [t in T, y in set],
+        vCCAP[y]/cap_size(y)-vCCOMMIT[t,y] >= sum(vCSHUT[hoursbefore(p, t, 0:(down_time(y) - 1)), y])
+    )
 end
 
 function thermal_storage_capacity_reserve_margin!(EP::Model, inputs::Dict)
