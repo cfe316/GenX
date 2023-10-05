@@ -14,15 +14,6 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-function by_rid_df(rid::Integer, sym::Symbol, df::DataFrame)
-    return df[df.R_ID .== rid, sym][]
-end
-
-function by_rid_df(rid::Vector{Int}, sym::Symbol, df::DataFrame)
-    indices = [findall(x -> x == y, df.R_ID)[] for y in rid]
-    return df[indices, sym]
-end
-
 function get_fus(inputs::Dict)::Vector{Int}
     dfTS = inputs["dfTS"]
     dfTS[dfTS.FUS.>=1,:R_ID]
