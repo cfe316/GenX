@@ -24,7 +24,6 @@ function default_settings()
         "IncludeLossesInESR" => 0,
         "EnableJuMPStringNames" => false,
         "HydrogenHourlyMatching" => 0,
-        "ThermalStorageMaintenanceStartCadence" => 168,
     )
 end
 
