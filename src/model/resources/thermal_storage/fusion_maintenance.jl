@@ -7,7 +7,7 @@ function maintenance_fusion_modification!(EP::Model, inputs::Dict)
 
     by_rid(rid, sym) = by_rid_df(rid, sym, inputs["dfTS"])
 
-    FUS = get_fus(inputs)
+    FUS = resources_with_fusion(inputs)
     MAINTENANCE = get_maintenance(inputs)
 
     vMDOWN = EP[:vMDOWN]
