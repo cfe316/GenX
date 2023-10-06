@@ -1,9 +1,13 @@
-function get_conventional_thermal_core(inputs::Dict)::Vector{Int}
+function resources_with_conventional_thermal_core(inputs::Dict)::Vector{Int}
     dfTS = inputs["dfTS"]
-    dfTS[dfTS.FUSION.==0,:R_ID]
+    if "FUSION" in names(dfTS)
+        dfTS[dfTS.FUSION.==0,:R_ID]
+    else
+        inputs["THERM_STOR"]
+    end
 end
 
-function get_resistive_heating(inputs::Dict)::Vector{Int}
+function resources_with_resistive_heating(inputs::Dict)::Vector{Int}
     dfTS = inputs["dfTS"]
     if "RH" in names(dfTS)
         dfTS[dfTS.RH.==1,:R_ID]
@@ -52,7 +56,7 @@ function thermal_storage!(EP::Model, inputs::Dict, setup::Dict)
     thermal_storage_duration_constraints!(EP, inputs)
 
     ### CONVENTIONAL CORE CONSTRAINTS ###
-    CONV = get_conventional_thermal_core(inputs)
+    CONV = resources_with_conventional_thermal_core(inputs)
 
     if !isempty(CONV)
         conventional_thermal_core_effective_electric_power_expression!(EP, inputs)
@@ -87,13 +91,35 @@ function thermal_storage!(EP::Model, inputs::Dict, setup::Dict)
 
     # must be run after maintenance
     total_fusion_power_balance_expressions!(EP, inputs)
-    return
+    return nothing
 end
+
+function thermal_storage_component_capacity!(EP::Model,
+                                             inputs::Dict,
+                                             rids::Vector{Int},
+
 
 function thermal_storage_base_variables!(EP::Model, inputs::Dict)
     T = 1:inputs["T"]
     TS = inputs["THERM_STOR"]
-    RH = get_resistive_heating(inputs)
+    RH = resources_with_resistive_heating(inputs)
+    CAN_BUILD = inputs["NEW_CAP"]
+
+    can_build_co = intersect(TS, CAN_BUILD)
+    can_build_ts = intersect(TS, CAN_BUILD)
+    can_build_rh = intersect(RH, CAN_BUILD)
+
+    CAN_RETIRE = inputs["RET_CAP"]
+    can_retire_ts = intersect(TS, CAN_RETIRE)
+    can_retire_rh = intersect(RH, CAN_RETIRE)
+
+    # each needs vNEWCAP_subcomp
+    #            vRETCAP_subcomp
+    #            eTotalCap_subcomp
+
+    # if multistage
+    #            vExisting_TS_subcomp
+
     @variables(EP, begin
         # Thermal core variables
         vCP[t in T, y in TS] >= 0      #thermal core power for resource y at timestep t
@@ -112,7 +138,7 @@ end
 function thermal_storage_core_commit!(EP::Model, inputs::Dict, setup::Dict)
     dfTS = inputs["dfTS"]
     T = 1:inputs["T"]
-    CONV = get_conventional_thermal_core(inputs)
+    CONV = resources_with_conventional_thermal_core(inputs)
     FUSION =  resources_with_fusion(inputs)
     THERM_COMMIT = inputs["THERM_COMMIT"]
     p = inputs["hours_per_subperiod"]
@@ -163,7 +189,7 @@ end
 function thermal_storage_capacity_costs!(EP::Model, inputs::Dict)
     dfTS = inputs["dfTS"]
     TS = inputs["THERM__STOR"]
-    RH = get_resistive_heating(inputs)
+    RH = resources_with_resistive_heating(inputs)
 
     by_rid(rid, sym) = by_rid_df(rid, sym, dfTS)
 
@@ -228,7 +254,7 @@ function thermal_storage_quantity_constraints!(EP::Model, inputs::Dict)
     T = 1:inputs["T"]
     p = inputs["hours_per_subperiod"]
     TS = inputs["THERM_STOR"]
-    RH = get_resistive_heating(inputs)
+    RH = resources_with_resistive_heating(inputs)
     vP = EP[:vP]
     vCP = EP[:vCP]
     vCCAP = EP[:vCCAP]
@@ -269,7 +295,7 @@ function thermal_storage_resistive_heating_power_balance!(EP::Model, inputs::Dic
     dfGen = inputs["dfGen"]
     T = 1:inputs["T"]
     Z = 1:inputs["Z"]
-    RH = get_resistive_heating(inputs)
+    RH = resources_with_resistive_heating(inputs)
     vRH = EP[:vRH]
     @expression(EP, ePowerBalanceRH[t in T, z in Z],
         - sum(vRH[t, y] for y in intersect(RH, dfGen[dfGen[!, :Zone].==z, :R_ID])))
@@ -357,7 +383,7 @@ function conventional_thermal_core_effective_electric_power_expression!(EP::Mode
     dfGen = inputs["dfGen"]
 
     # convert thermal capacities to electrical capacities
-    CONV =  get_conventional_thermal_core(inputs)
+    CONV =  resources_with_conventional_thermal_core(inputs)
     @expression(EP, eCElectric[y in CONV], EP[:vCCAP][y] * dfGen[y, :Eff_Down])
 end
 
@@ -379,7 +405,7 @@ end
 
 # TODO make compatible with reserves
 function conventional_thermal_core_constraints!(EP::Model, inputs::Dict, setup::Dict)
-    CONV = get_conventional_thermal_core(inputs)
+    CONV = resources_with_conventional_thermal_core(inputs)
     THERM_COMMIT = inputs["THERM_COMMIT"]
     THERM_NO_COMMIT = inputs["THERM_NO_COMMIT"]
 
@@ -402,7 +428,7 @@ function conventional_thermal_core_no_commit_constraints!(EP::Model, inputs::Dic
     T = 1:inputs["T"]     # Number of time steps (hours)
     p = inputs["hours_per_subperiod"] #total number of hours per subperiod
 
-    CONV = get_conventional_thermal_core(inputs)
+    CONV = resources_with_conventional_thermal_core(inputs)
     THERM_NO_COMMIT = inputs["THERM_NO_COMMIT"]
     set = intersect(THERM_NO_COMMIT, CONV)
 
@@ -431,7 +457,7 @@ function conventional_thermal_core_commit_constraints!(EP::Model, inputs::Dict)
     p = inputs["hours_per_subperiod"] #total number of hours per subperiod
     ω = inputs["omega"]
 
-    CONV = get_conventional_thermal_core(inputs)
+    CONV = resources_with_conventional_thermal_core(inputs)
     THERM_COMMIT = inputs["THERM_COMMIT"]
 
     set = intersect(THERM_COMMIT, CONV)
@@ -489,7 +515,7 @@ function thermal_storage_capacity_reserve_margin!(EP::Model, inputs::Dict)
 
     TS = inputs["THERM_STOR"]
     FUSION = resources_with_fusion(inputs)
-    CONV = get_conventional_thermal_core(inputs)
+    CONV = resources_with_conventional_thermal_core(inputs)
     MAINTENANCE = get_maintenance(inputs)
 
     by_rid(rid, sym) = by_rid_df(rid, sym, dfTS)
@@ -536,7 +562,7 @@ function thermal_core_emissions!(EP::Model, inputs::Dict)
     T = 1:inputs["T"]
     Z = 1:inputs["Z"]
 
-    CONV = get_conventional_thermal_core(inputs)
+    CONV = resources_with_conventional_thermal_core(inputs)
     THERM_COMMIT = inputs["THERM_COMMIT"]
     by_rid(rid, sym) = by_rid_df(rid, sym, dfTS)
 
