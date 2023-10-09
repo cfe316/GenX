@@ -31,6 +31,25 @@ function resources_with_fusion(inputs::Dict)::Vector{Int}
     resources_with_fusion(inputs["dfTS"])
 end
 
+function fusion_average_net_electric_power_factor!(fusiondata, eff_down)
+    dwell_time = fusiondata.dwell_time
+    max_up = fusiondata.max_up
+    parasitic_start_energy = fusiondata.parasitic_start_energy
+    parasitic_start_power = fusiondata.parasitic_start_power
+    parasitic_passive = fusiondata.parasitic_passive
+    parasitic_active = fusiondata.parasitic_active
+
+    active_frac = 1
+    avg_start_power = 0
+    if max_up > 0
+        active_frac = 1 - dwell_time / max_up
+        avg_start_power = parasitic_start_energy / max_up
+    end
+    net_th_frac = active_frac * (1 - parasitic_active) - parasitic_passive - avg_start_power
+    net_el_factor = eff_down * net_th_frac
+    return net_th_factor
+end
+
 function fusion_average_net_electric_power_expression!(EP::Model, inputs::Dict)
     dfGen = inputs["dfGen"]
 
@@ -121,8 +140,8 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
                                    y,
                                    max_starts(y),
                                    core_cap_size(y),
-                                   :vCSTART,
-                                   :vCCAP)
+                                   :vCCAP,
+                                   :vCSTART)
     end
 
     for y in FUSION
@@ -133,9 +152,9 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
                                   max_uptime(y),
                                   dwell_time(y),
                                   core_cap_size(y),
+                                  :vCP,
                                   :vCSTART,
-                                  :vCCOMMIT,
-                                  :vCP)
+                                  :vCCOMMIT)
 
         fusion_parasitic_power!(EP,
                                 timebase,
@@ -192,9 +211,9 @@ function fusion_pulse_constraints!(
     max_uptime::Int,
     dwell_time::Float64,
     component_size::Float64,
+    vp::Symbol,
     vstart::Symbol,
     vcommit::Symbol,
-    vp::Symbol,
 )
     T = timebase.T
     p = timebase.hours_per_subperiod
@@ -237,8 +256,8 @@ function maximum_starts_constraint!(EP::Model,
         r_id::Int,
         max_starts::Int,
         component_size::Float64,
-        vstart::Symbol,
-        capacity::Symbol)
+        capacity::Symbol,
+        vstart::Symbol)
 
     T = timebase.T
     ω = timebase.weights
