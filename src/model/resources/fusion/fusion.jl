@@ -1,14 +1,47 @@
-struct GenXTimebase
-    T::UnitRange{Int}
-    hours_per_subperiod::Int
-    weights::Vector{Float64}
+const FUSION_PARASITIC_POWER = "FusionParasiticPowerExpressions"
+const FUSION_PULSE_START_POWER = "FusionPulseStartPowerExpressions"
+
+function fusion_parasitic_active_name(resource_component::AbstractString)::String
+    "eFusionParasiticActive_" * resource_component
+end
+
+function fusion_parasitic_passive_name(resource_component::AbstractString)::String
+    "eFusionParasiticPassive_" * resource_component
+end
+
+function fusion_parasitic_start_energy_name(resource_component::AbstractString)::String
+    "eFusionParasiticStartEnergy_" * resource_component
+end
+
+function fusion_pulse_start_power_name(resource_component::AbstractString)::String
+    "eFusionPulseStartPower_" * resource_component
+end
+
+function fusion_parasitic_total_name(resource_component::AbstractString)::String
+    "eFusionParasiticTotal_" * resource_component
+end
+
+@doc raw"""
+    ensure_fusion_expression_records!(dict::Dict)
+
+    dict: a dictionary of model data
+
+    This should be called by each method that adds fusion formulations,
+    to ensure that certain entries in the model data dict exist.
+"""
+function ensure_fusion_expression_records!(dict::Dict)
+    for var in (FUSION_PARASITIC_POWER)
+        if var ∉ keys(dict)
+            dict[var] = Set{Symbol}()
+        end
+    end
 end
 
 @doc raw"""
     resources_with_fusion(df::DataFrame)::Vector{Int}
 
-    Get a vector of the R_ID's of all resources listed in a dataframe
-    that have maintenance requirements. If there are none, return an empty vector.
+    Get a vector of the R_ID's of all fusion resources listed in a dataframe.
+    If there are none, return an empty vector.
 
     This method takes a specific dataframe because compound resources may have their
     data in multiple dataframes.
@@ -22,22 +55,22 @@ function resources_with_fusion(df::DataFrame)::Vector{Int}
 end
 
 @doc raw"""
-    resources_with_maintenance(inputs::Dict)::Vector{Int}
+    resources_with_fusion(inputs::Dict)::Vector{Int}
 
     Get a vector of the R_ID's of all resources listed in a dataframe
-    that have maintenance requirements. If there are none, return an empty vector.
+    that have fusion. If there are none, return an empty vector.
 """
 function resources_with_fusion(inputs::Dict)::Vector{Int}
-    resources_with_fusion(inputs["dfTS"])
+    resources_with_fusion(inputs["dfGen"])
 end
 
 function fusion_average_net_electric_power_factor!(fusiondata, eff_down)
     dwell_time = fusiondata.dwell_time
     max_up = fusiondata.max_up
     parasitic_start_energy = fusiondata.parasitic_start_energy
-    parasitic_start_power = fusiondata.parasitic_start_power
     parasitic_passive = fusiondata.parasitic_passive
     parasitic_active = fusiondata.parasitic_active
+    pulse_start_power = fusiondata.parasitic_start_power
 
     active_frac = 1
     avg_start_power = 0
@@ -103,11 +136,6 @@ Apply fusion-core-specific constraints to the model.
 """
 function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 
-    T = 1:inputs["T"]
-    p = inputs["hours_per_subperiod"]
-    ω = inputs["omega"]
-    timebase = GenXTimebase(T, p, ω)
-
     dfGen = inputs["dfGen"]
     dfTS = inputs["dfTS"]
 
@@ -136,7 +164,7 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 
     for y in FINITE_STARTS
         maximum_starts_constraint!(EP,
-                                   timebase,
+                                   inputs,
                                    y,
                                    max_starts(y),
                                    core_cap_size(y),
@@ -146,7 +174,7 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
 
     for y in FUSION
         fusion_pulse_constraints!(EP,
-                                  timebase,
+                                  inputs,
                                   resource_component(y),
                                   y,
                                   max_uptime(y),
@@ -157,7 +185,7 @@ function fusion_constraints!(EP::Model, inputs::Dict, setup::Dict)
                                   :vCCOMMIT)
 
         fusion_parasitic_power!(EP,
-                                timebase,
+                                inputs,
                                 resource_component(y),
                                 y,
                                 core_cap_size(y),
@@ -205,7 +233,7 @@ end
 """
 function fusion_pulse_constraints!(
     EP::Model,
-    timebase::GenXTimebase,
+    inputs::Dict,
     resource_component::AbstractString,
     r_id::Int,
     max_uptime::Int,
@@ -215,8 +243,9 @@ function fusion_pulse_constraints!(
     vstart::Symbol,
     vcommit::Symbol,
 )
-    T = timebase.T
-    p = timebase.hours_per_subperiod
+    T = 1:inputs["T"]
+    p = inputs["hours_per_subperiod"]
+
     y = r_id
 
     power = EP[vp]
@@ -244,7 +273,7 @@ end
 
 @doc raw"""
     maximum_starts_constraint!(EP::Model,
-        timebase::GenXTimebase,
+        inputs::Dict,
         r_id::Int,
         max_starts::Int,
         component_size::Float64,
@@ -252,15 +281,15 @@ end
         etotalcap::Symbol)
 """
 function maximum_starts_constraint!(EP::Model,
-        timebase::GenXTimebase,
+        inputs::Dict,
         r_id::Int,
         max_starts::Int,
         component_size::Float64,
         capacity::Symbol,
         vstart::Symbol)
 
-    T = timebase.T
-    ω = timebase.weights
+    T = 1:inputs["T"]
+    ω = inputs["omega"]
     y = r_id
     start = EP[vstart]
     totalcap = EP[etotalcap]
@@ -269,29 +298,9 @@ function maximum_starts_constraint!(EP::Model,
                 max_starts * totalcap[y] / component_size)
 end
 
-function fusion_parasitic_active_name(resource_component::AbstractString)::String
-    "eFusionParasiticActive_" * resource_component
-end
-
-function fusion_parasitic_passive_name(resource_component::AbstractString)::String
-    "eFusionParasiticPassive_" * resource_component
-end
-
-function fusion_parasitic_start_energy_name(resource_component::AbstractString)::String
-    "eFusionParasiticStartEnergy_" * resource_component
-end
-
-function fusion_parasitic_start_power_name(resource_component::AbstractString)::String
-    "eFusionParasiticStartPower_" * resource_component
-end
-
-function fusion_parasitic_total_name(resource_component::AbstractString)::String
-    "eFusionParasiticTotal_" * resource_component
-end
-
 function fusion_parasitic_power!(EP::Model,
-        timebase::GenXTimebase,
-        resource_component::AbstractString,
+        inputs::Dict,
+        resource_component,
         r_id::Int,
         component_size::Float64,
         eff_down::Float64,
@@ -304,7 +313,7 @@ function fusion_parasitic_power!(EP::Model,
         vstart::Symbol,
         vcommit::Symbol,
     )
-    T = timebase.T
+    T = inputs["T"]
     y = r_id
 
     capacity = EP[component_capacity]
@@ -315,6 +324,7 @@ function fusion_parasitic_power!(EP::Model,
     active = Symbol(fusion_parasitic_active_name(resource_component))
     start_energy = Symbol(fusion_parasitic_start_energy_name(resource_component))
     total_parasitic = Symbol(fusion_parasitic_total_name(resource_component))
+    pulse_start_power = Symbol(fusion_pulse_start_power_name(resource_component))
 
     # Passive recirculating power, depending on built capacity
     ePassive = EP[passive] = @expression(EP, [t in T],
@@ -330,9 +340,11 @@ function fusion_parasitic_power!(EP::Model,
                 component_size * start[y,t] * eff_down * parasitic_start_energy_factor)
 
     EP[total_parasitic] = @expression(EP, [t in T], ePassiveRecirc[t] + eActive[t] + eStartEnergy[t])
+    union!(inputs[FUSION_PARASITIC_POWER], (total_parasitic,))
 
     # Startup power, required margin on the grid when the core starts
-    EP[start_power] = @expression(EP, eStartPowerFus[t in T],
+    EP[pulse_start_power] = @expression(EP, [t in T],
                 component_size * start[y,t] * eff_down * parasitic_start_power_factor)
+    union!(inputs[FUSION_PULSE_START_POWER], (start_power,))
 
 end
