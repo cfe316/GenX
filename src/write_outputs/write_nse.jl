@@ -12,8 +12,9 @@ function write_nse(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
 	dfNse = DataFrame(Segment = repeat(1:SEG, outer = Z), Zone = repeat(1:Z, inner = SEG), AnnualSum = zeros(SEG * Z))
 	nse = zeros(SEG * Z, T)
 	scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
+    energy_scale = scale_factor
 	for z in 1:Z
-		nse[((z-1)*SEG+1):z*SEG, :] = value.(EP[:vNSE])[:, :, z] * scale_factor
+		nse[((z-1)*SEG+1):z*SEG, :] = value.(EP[:vNSE])[:, :, z] * energy_scale
 	end
 	dfNse.AnnualSum .= nse * inputs["omega"]
 	dfNse = hcat(dfNse, DataFrame(nse, :auto))
