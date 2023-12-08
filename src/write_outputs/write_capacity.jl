@@ -9,6 +9,8 @@ function write_capacity(path::AbstractString, inputs::Dict, setup::Dict, EP::Mod
 	MultiStage = setup["MultiStage"]
 
     scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
+    energy_scale = scale_factor
+    currency_per_energy_scale= scale_factor
 
 	capdischarge = zeros(size(inputs["RESOURCES"]))
 	for i in inputs["NEW_CAP"]
@@ -89,19 +91,19 @@ function write_capacity(path::AbstractString, inputs::Dict, setup::Dict, EP::Mod
 		EndChargeCap = existingcapcharge[:] - retcapcharge[:] + capcharge[:]
 	)
 
-    dfCap.StartCap *= scale_factor
-    dfCap.RetCap *= scale_factor
-    dfCap.NewCap *= scale_factor
-    dfCap.EndCap *= scale_factor
-    dfCap.CapacityConstraintDual *= scale_factor
-    dfCap.StartEnergyCap *= scale_factor
-    dfCap.RetEnergyCap *= scale_factor
-    dfCap.NewEnergyCap *= scale_factor
-    dfCap.EndEnergyCap *= scale_factor
-    dfCap.StartChargeCap *= scale_factor
-    dfCap.RetChargeCap *= scale_factor
-    dfCap.NewChargeCap *= scale_factor
-    dfCap.EndChargeCap *= scale_factor
+    dfCap.StartCap *= energy_scale
+    dfCap.RetCap *= energy_scale
+    dfCap.NewCap *= energy_scale
+    dfCap.EndCap *= energy_scale
+    dfCap.CapacityConstraintDual *= currency_per_energy_scale
+    dfCap.StartEnergyCap *= energy_scale
+    dfCap.RetEnergyCap *= energy_scale
+    dfCap.NewEnergyCap *= energy_scale
+    dfCap.EndEnergyCap *= energy_scale
+    dfCap.StartChargeCap *= energy_scale
+    dfCap.RetChargeCap *= energy_scale
+    dfCap.NewChargeCap *= energy_scale
+    dfCap.EndChargeCap *= energy_scale
 
 	total = DataFrame(
 			Resource = "Total", Zone = "n/a",
