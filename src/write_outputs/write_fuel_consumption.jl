@@ -21,9 +21,10 @@ function write_fuel_consumption_plant(path::AbstractString,inputs::Dict, setup::
 		AnnualSum = zeros(length(HAS_FUEL)))
 	tempannualsum = value.(EP[:ePlantCFuelOut][HAS_FUEL]) + value.(EP[:ePlantCFuelStart][HAS_FUEL])
 
-    if setup["ParameterScale"] == 1
-        tempannualsum *= ModelScalingFactor^2 # 
-    end
+    scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
+    currency_scale = scale_factor^2
+
+    tempannualsum *= currency_scale
     dfPlantFuel.AnnualSum .+= tempannualsum
     CSV.write(joinpath(path, "Fuel_cost_plant.csv"), dfPlantFuel)
 end
@@ -35,9 +36,9 @@ function write_fuel_consumption_ts(path::AbstractString, inputs::Dict, setup::Di
 	# Fuel consumption by each resource per time step, unit is MMBTU
 	dfPlantFuel_TS = DataFrame(Resource = inputs["RESOURCES"][HAS_FUEL])
 	tempts = value.(EP[:vFuel] + EP[:eStartFuel])[HAS_FUEL,:]
-    if setup["ParameterScale"] == 1
-        tempts *= ModelScalingFactor # kMMBTU to MMBTU
-    end
+    scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
+    energy_scale = scale_factor
+    tempts *= energy_scale # kMMBTU to MMBTU
 	dfPlantFuel_TS = hcat(dfPlantFuel_TS,
 		DataFrame(tempts, [Symbol("t$t") for t in 1:T]))
     CSV.write(joinpath(path, "FuelConsumption_plant_MMBTU.csv"), 
@@ -52,9 +53,8 @@ function write_fuel_consumption_tot(path::AbstractString, inputs::Dict, setup::D
 	dfFuel = DataFrame(Fuel = fuel_types, 
 		AnnualSum = zeros(fuel_number))
 	tempannualsum = value.(EP[:eFuelConsumptionYear])
-    if setup["ParameterScale"] == 1
-        tempannualsum *= ModelScalingFactor # billion MMBTU to MMBTU
-    end
+    scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
+    tempannualsum *= energy_scale # billion MMBTU to MMBTU
 	dfFuel.AnnualSum .+= tempannualsum
  	CSV.write(joinpath(path,"FuelConsumption_total_MMBTU.csv"), dfFuel)
 end
