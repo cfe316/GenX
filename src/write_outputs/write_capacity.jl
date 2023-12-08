@@ -7,7 +7,9 @@ function write_capacity(path::AbstractString, inputs::Dict, setup::Dict, EP::Mod
 	# Capacity decisions
 	dfGen = inputs["dfGen"]
 	MultiStage = setup["MultiStage"]
-	
+
+    scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
+
 	capdischarge = zeros(size(inputs["RESOURCES"]))
 	for i in inputs["NEW_CAP"]
 		if i in inputs["COMMIT"]
@@ -86,21 +88,21 @@ function write_capacity(path::AbstractString, inputs::Dict, setup::Dict, EP::Mod
 		NewChargeCap = capcharge[:],
 		EndChargeCap = existingcapcharge[:] - retcapcharge[:] + capcharge[:]
 	)
-	if setup["ParameterScale"] ==1
-		dfCap.StartCap = dfCap.StartCap * ModelScalingFactor
-		dfCap.RetCap = dfCap.RetCap * ModelScalingFactor
-		dfCap.NewCap = dfCap.NewCap * ModelScalingFactor
-		dfCap.EndCap = dfCap.EndCap * ModelScalingFactor
-		dfCap.CapacityConstraintDual = dfCap.CapacityConstraintDual * ModelScalingFactor
-		dfCap.StartEnergyCap = dfCap.StartEnergyCap * ModelScalingFactor
-		dfCap.RetEnergyCap = dfCap.RetEnergyCap * ModelScalingFactor
-		dfCap.NewEnergyCap = dfCap.NewEnergyCap * ModelScalingFactor
-		dfCap.EndEnergyCap = dfCap.EndEnergyCap * ModelScalingFactor
-		dfCap.StartChargeCap = dfCap.StartChargeCap * ModelScalingFactor
-		dfCap.RetChargeCap = dfCap.RetChargeCap * ModelScalingFactor
-		dfCap.NewChargeCap = dfCap.NewChargeCap * ModelScalingFactor
-		dfCap.EndChargeCap = dfCap.EndChargeCap * ModelScalingFactor
-	end
+
+    dfCap.StartCap *= scale_factor
+    dfCap.RetCap *= scale_factor
+    dfCap.NewCap *= scale_factor
+    dfCap.EndCap *= scale_factor
+    dfCap.CapacityConstraintDual *= scale_factor
+    dfCap.StartEnergyCap *= scale_factor
+    dfCap.RetEnergyCap *= scale_factor
+    dfCap.NewEnergyCap *= scale_factor
+    dfCap.EndEnergyCap *= scale_factor
+    dfCap.StartChargeCap *= scale_factor
+    dfCap.RetChargeCap *= scale_factor
+    dfCap.NewChargeCap *= scale_factor
+    dfCap.EndChargeCap *= scale_factor
+
 	total = DataFrame(
 			Resource = "Total", Zone = "n/a",
 			StartCap = sum(dfCap[!,:StartCap]), RetCap = sum(dfCap[!,:RetCap]),
