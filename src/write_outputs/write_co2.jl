@@ -17,29 +17,18 @@ function write_co2_emissions_plant(path::AbstractString,
     G = inputs["G"]     # Number of resources (generators, storage, DR, and DERs)
 
     # CO2 emissions by plant
-    dfEmissions_plant = DataFrame(Resource = inputs["RESOURCE_NAMES"],
-        Zone = zone_id.(gen),
-        AnnualSum = zeros(G))
     emissions_plant = value.(EP[:eEmissionsByPlant])
 
     if setup["ParameterScale"] == 1
         emissions_plant *= ModelScalingFactor
     end
-    dfEmissions_plant.AnnualSum .= emissions_plant * inputs["omega"]
 
-    filepath = joinpath(path, "emissions_plant.csv")
-    if setup["WriteOutputs"] == "annual"
-        write_annual(filepath, dfEmissions_plant)
-    else # setup["WriteOutputs"] == "full"
-        df_Emissions_plant = write_fulltimeseries(
-            filepath, emissions_plant, dfEmissions_plant)
-        if setup["OutputFullTimeSeries"] == 1 && setup["TimeDomainReduction"] == 1
-            write_full_time_series_reconstruction(
-                path, setup, df_Emissions_plant, "emissions_plant")
-            @info("Writing Full Time Series for Emissions Plant")
-        end
-    end
-    return nothing
+    df= DataFrame(Resource = inputs["RESOURCE_NAMES"],
+        Zone = zone_id.(gen),
+        AnnualSum = zeros(G))
+    df.AnnualSum .= emissions_plant * inputs["omega"]
+
+    _write_timeseries_file(df, emissions_plant, path, setup, "emissions_plant")
 end
 
 function write_co2_capture_plant(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)

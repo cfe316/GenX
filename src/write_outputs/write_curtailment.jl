@@ -53,15 +53,5 @@ function write_curtailment(path::AbstractString, inputs::Dict, setup::Dict, EP::
 
     dfCurtailment.AnnualSum = curtailment * inputs["omega"]
 
-    filename = joinpath(path, "curtail.csv")
-    if setup["WriteOutputs"] == "annual"
-        write_annual(filename, dfCurtailment)
-    else # setup["WriteOutputs"] == "full"
-        df_Curtailment = write_fulltimeseries(filename, curtailment, dfCurtailment)
-        if setup["OutputFullTimeSeries"] == 1 && setup["TimeDomainReduction"] == 1
-            write_full_time_series_reconstruction(path, setup, df_Curtailment, "curtail")
-            @info("Writing Full Time Series for Curtailment")
-        end
-    end
-    return nothing
+    _write_timeseries_file(dfCurtailment, curtailment, path, setup, "curtail")
 end

@@ -553,7 +553,6 @@ function write_system_env_summary(path::AbstractString)
     YAML.write_file(joinpath(path, "system_summary.yml"), env_summary)
 end
 
-# used by ucommit. Could be used by more functions as well.
 function _prepare_annualsum_df(inputs::Dict, set::Vector{Int64}, data::Matrix{Float64})
     resources = inputs["RESOURCE_NAMES"][set]
     zones = inputs["R_ZONES"][set]
