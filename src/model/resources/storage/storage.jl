@@ -203,27 +203,29 @@ function may_have_pairwise_capacity_links(df::DataFrame)
 end
 
 function find_paired_resources(rs::Vector{<:AbstractResource})
+    paired_resource_col = :paired_resource
     pair_names = paired_resource.(rs)
 
     function find_id_of_linked(y)::Int
-        paired_resource_name = df[y, paired_resource]
+        paired_resource_name = pair_names[y]
 
+        # partway through modifying this
         outbound = findall(df.Resource .== paired_resource_name)
         if length(outbound) == 0
-            error("Resource name $paired_resource_name linked by $y in $paired_resource not found.")
+            error("Resource name $paired_resource_name linked by $y in $paired_resource_col not found.")
         end
 
         inbound = findall(df[!, paired_resource] .== resource_name(y))
         if length(inbound) == 0
-            error("Resources must be linked in pairs via $paired_resource; $y has nothing linking back to it.")
+            error("Resources must be linked in pairs via $paired_resource_col; $y has nothing linking back to it.")
         end
         if length(inbound) > 1
-            error("Only two resources can link together via $paired_resource. $inbound all link to $y.")
+            error("Only two resources can link together via $paired_resource_col. $inbound all link to $y.")
         end
 
         linked = inbound[1]
         if y == linked
-            error("A resource cannot link to itself via $paired_resource. $y is doing this.")
+            error("A resource cannot link to itself via $paired_resource_col. $y is doing this.")
         end
         return linked
     end
@@ -233,7 +235,7 @@ function find_paired_resources(rs::Vector{<:AbstractResource})
     for id_a in has_link
         id_b = find_id_of_linked(id_a)
         if id_a != find_id_of_linked(id_b)
-            error("Resources $id_a and $id_b must link to each other, via $paired_resource.")
+            error("Resources $id_a and $id_b must link to each other, via $paired_resource_col.")
         end
         if id_a < id_b # no need to create the constraint twice.
             push!(_pairs, Pair(id_a, id_b))
