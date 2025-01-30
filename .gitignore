@@ -21,6 +21,8 @@ Highs.log
 
 test/Logs
 
+.ipynb_checkpoints/
+
 /docs/build/
 
 # Microsoft office temporary files
