@@ -202,9 +202,8 @@ function may_have_pairwise_capacity_links(df::DataFrame)
     return string(paired_resource) in columns
 end
 
-function find_paired_resources(df::DataFrame)
-    paired_resource = :Paired_Resource
-    resource_name(y) = df[y, :Resource]
+function find_paired_resources(rs::Vector{<:AbstractResource})
+    pair_names = paired_resource.(rs)
 
     function find_id_of_linked(y)::Int
         paired_resource_name = df[y, paired_resource]
@@ -230,7 +229,7 @@ function find_paired_resources(df::DataFrame)
     end
 
     _pairs = Pair{Int,Int}[]
-    has_link = findall(df[!, paired_resource] .!= "None")
+    has_link = findall(pair_names .!= "None")
     for id_a in has_link
         id_b = find_id_of_linked(id_a)
         if id_a != find_id_of_linked(id_b)
@@ -257,8 +256,8 @@ function charge_capacity_proportional_link!(EP::Model, id_a, id_b)
 end
 
 
-function link_capacities!(EP::Model, df::DataFrame)
-    _pairs = find_paired_resources(df)
+function link_capacities!(EP::Model, rs::Vector{<:AbstractResource})
+    _pairs = find_paired_resources(rs)
     for p in _pairs
         id_a = p.first
         id_b = p.second
