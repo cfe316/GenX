@@ -195,3 +195,74 @@ function storage!(EP::Model, inputs::Dict, setup::Dict)
         add_similar_to_expression!(EP[:eCapResMarBalance], eCapResMarBalanceStor)
     end
 end
+
+function may_have_pairwise_capacity_links(df::DataFrame)
+    columns = names(df)
+    paired_resource = :Paired_Resource
+    return string(paired_resource) in columns
+end
+
+function find_paired_resources(df::DataFrame)
+    paired_resource = :Paired_Resource
+    resource_name(y) = df[y, :Resource]
+
+    function find_id_of_linked(y)::Int
+        paired_resource_name = df[y, paired_resource]
+
+        outbound = findall(df.Resource .== paired_resource_name)
+        if length(outbound) == 0
+            error("Resource name $paired_resource_name linked by $y in $paired_resource not found.")
+        end
+
+        inbound = findall(df[!, paired_resource] .== resource_name(y))
+        if length(inbound) == 0
+            error("Resources must be linked in pairs via $paired_resource; $y has nothing linking back to it.")
+        end
+        if length(inbound) > 1
+            error("Only two resources can link together via $paired_resource. $inbound all link to $y.")
+        end
+
+        linked = inbound[1]
+        if y == linked
+            error("A resource cannot link to itself via $paired_resource. $y is doing this.")
+        end
+        return linked
+    end
+
+    _pairs = Pair{Int,Int}[]
+    has_link = findall(df[!, paired_resource] .!= "None")
+    for id_a in has_link
+        id_b = find_id_of_linked(id_a)
+        if id_a != find_id_of_linked(id_b)
+            error("Resources $id_a and $id_b must link to each other, via $paired_resource.")
+        end
+        if id_a < id_b # no need to create the constraint twice.
+            push!(_pairs, Pair(id_a, id_b))
+        end
+    end
+    return _pairs
+end
+
+function capacity_proportional_link!(EP::Model, id_a, id_b)
+    @info "Linking capacities $id_a and $id_b"
+    cap = EP[:eTotalCap]
+    @constraint(EP, cap[id_a] == cap[id_b])
+    energycap = EP[:eTotalEnergyCap]
+    @constraint(EP, energycap[id_a] == energycap[id_b])
+end
+
+function charge_capacity_proportional_link!(EP::Model, id_a, id_b)
+    cap = EP[:eTotalCapCharge]
+    @constraint(EP, cap[id_a] == cap[id_b])
+end
+
+
+function link_capacities!(EP::Model, df::DataFrame)
+    _pairs = find_paired_resources(df)
+    for p in _pairs
+        id_a = p.first
+        id_b = p.second
+        capacity_proportional_link!(EP, id_a, id_b)
+    end
+end
+
