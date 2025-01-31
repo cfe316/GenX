@@ -16,6 +16,7 @@ function storage_symmetric!(EP::Model, inputs::Dict, setup::Dict)
     T = inputs["T"]     # Number of time steps (hours)
 
     SYMMETRIC = inputs["STOR_SYMMETRIC"]
+    # SAILING modify for effectiveTotalCap?
     eTotalCap = EP[:eTotalCap]
     vP = EP[:vP]
     vCHARGE = EP[:vCHARGE]
@@ -46,5 +47,6 @@ function storage_symmetric!(EP::Model, inputs::Dict, setup::Dict)
         add_similar_to_expression!(expr[SYMMETRIC, :], vCAPRES_discharge[SYMMETRIC, :])
     end
 
+    # SAILING_MOFIFY, add imports/exports
     @constraint(EP, [y in SYMMETRIC, t in 1:T], expr[y, t]<=eTotalCap[y])
 end

@@ -140,4 +140,9 @@ function investment_charge!(EP::Model, inputs::Dict, setup::Dict)
         cMinCapCharge[y in intersect(ids_with_positive(gen, min_charge_cap_mw),
             STOR_ASYMMETRIC)],
         eTotalCapCharge[y]>=min_charge_cap_mw(gen[y]))
+
+    # pairswise capacity resources
+    if may_have_pairwise_capacity_links(gen)
+        link_charge_capacities!(gen)
+    end
 end

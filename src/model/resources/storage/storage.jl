@@ -144,6 +144,7 @@ function storage!(EP::Model, inputs::Dict, setup::Dict)
 
     if !isempty(STOR_ALL)
         investment_energy!(EP, inputs, setup)
+        # sailing_variables!(EP, inputs, setup)
         storage_all!(EP, inputs, setup)
 
         # Include Long Duration Storage only when modeling representative periods and long-duration storage
@@ -196,10 +197,10 @@ function storage!(EP::Model, inputs::Dict, setup::Dict)
     end
 end
 
-function may_have_pairwise_capacity_links(df::DataFrame)
-    columns = names(df)
-    paired_resource = :Paired_Resource
-    return string(paired_resource) in columns
+function may_have_pairwise_capacity_links(rs::Vector{<:AbstractResource})
+    pair_names = paired_resource.(rs)
+
+    return any(!=("None"), pair_names)
 end
 
 function find_paired_resources(rs::Vector{<:AbstractResource})
@@ -207,25 +208,24 @@ function find_paired_resources(rs::Vector{<:AbstractResource})
     pair_names = paired_resource.(rs)
 
     function find_id_of_linked(y)::Int
+        r = rs[y]
+        this_name = resource_name(r)
         paired_resource_name = pair_names[y]
 
-        # partway through modifying this
-        outbound = findall(df.Resource .== paired_resource_name)
-        if length(outbound) == 0
-            error("Resource name $paired_resource_name linked by $y in $paired_resource_col not found.")
-        end
+        outbound = resource_by_name(rs, paired_resource_name).id
 
-        inbound = findall(df[!, paired_resource] .== resource_name(y))
+        inbound = findall(pair_names .== this_name)
         if length(inbound) == 0
-            error("Resources must be linked in pairs via $paired_resource_col; $y has nothing linking back to it.")
+            error("Resources must be linked in pairs via $paired_resource_col; $this_name has nothing linking back to it.")
         end
         if length(inbound) > 1
-            error("Only two resources can link together via $paired_resource_col. $inbound all link to $y.")
+            inbound_names = resource_name.(rs[inbound])
+            error("Only two resources can link together via $paired_resource_col. $inbound_names all link to $this_name.")
         end
 
         linked = inbound[1]
         if y == linked
-            error("A resource cannot link to itself via $paired_resource_col. $y is doing this.")
+            error("A resource cannot link to itself via $paired_resource_col. $this_name is doing this.")
         end
         return linked
     end
@@ -245,7 +245,6 @@ function find_paired_resources(rs::Vector{<:AbstractResource})
 end
 
 function capacity_proportional_link!(EP::Model, id_a, id_b)
-    @info "Linking capacities $id_a and $id_b"
     cap = EP[:eTotalCap]
     @constraint(EP, cap[id_a] == cap[id_b])
     energycap = EP[:eTotalEnergyCap]
@@ -253,17 +252,27 @@ function capacity_proportional_link!(EP::Model, id_a, id_b)
 end
 
 function charge_capacity_proportional_link!(EP::Model, id_a, id_b)
-    cap = EP[:eTotalCapCharge]
-    @constraint(EP, cap[id_a] == cap[id_b])
+    capcharge = EP[:eTotalCapCharge]
+    @constraint(EP, capcharge[id_a] == capcharge[id_b])
 end
-
 
 function link_capacities!(EP::Model, rs::Vector{<:AbstractResource})
     _pairs = find_paired_resources(rs)
     for p in _pairs
         id_a = p.first
         id_b = p.second
-        capacity_proportional_link!(EP, id_a, id_b)
+        @info "Linking capacities $id_a and $id_b"
+        charge_capacity_proportional_link!(EP, id_a, id_b)
+    end
+end
+
+function link_charge_capacities!(EP::Model, rs::Vector{<:AbstractResource})
+    _pairs = find_paired_resources(rs)
+    for p in _pairs
+        id_a = p.first
+        id_b = p.second
+        @info "Linking capacities $id_a and $id_b"
+        charge_capacity_proportional_link!(EP, id_a, id_b)
     end
 end
 

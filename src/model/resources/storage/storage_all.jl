@@ -126,6 +126,7 @@ function storage_all!(EP::Model, inputs::Dict, setup::Dict)
     @constraints(EP,
         begin
             # Maximum energy stored must be less than energy capacity
+            # SAILING_MODIFY
             [y in STOR_ALL, t in 1:T], vS[y, t] <= eTotalCapEnergy[y]
 
             # energy stored for the next hour
@@ -156,6 +157,7 @@ function storage_all!(EP::Model, inputs::Dict, setup::Dict)
             # wrapping from end of sample period to start of sample period for energy capacity constraint
             @constraints(EP,
                 begin
+                    # SAILING_MODIFY
                     [y in STOR_ALL, t = 1:T],
                     vP[y, t] + vCAPRES_discharge[y, t] <= eTotalCap[y]
                     [y in STOR_ALL, t = 1:T],
@@ -166,6 +168,7 @@ function storage_all!(EP::Model, inputs::Dict, setup::Dict)
         else
             @constraints(EP,
                 begin
+                    # SAILING_MODIFY
                     [y in STOR_ALL, t = 1:T], vP[y, t] <= eTotalCap[y]
                     [y in STOR_ALL, t = 1:T],
                     vP[y, t] <=
@@ -237,6 +240,7 @@ function storage_all_operational_reserves!(EP::Model, inputs::Dict, setup::Dict)
     eTotalCapEnergy = EP[:eTotalCapEnergy]
 
     # Maximum storage contribution to reserves is a specified fraction of installed capacity
+    # SAILING_MODIFY
     @constraint(EP, [y in STOR_REG, t in 1:T], vREG[y, t]<=reg_max(gen[y]) * eTotalCap[y])
     @constraint(EP, [y in STOR_RSV, t in 1:T], vRSV[y, t]<=rsv_max(gen[y]) * eTotalCap[y])
 
@@ -260,6 +264,7 @@ function storage_all_operational_reserves!(EP::Model, inputs::Dict, setup::Dict)
     @constraint(EP, [y in STOR_REG, t in 1:T], vP[y, t] - vREG_discharge[y, t]>=0)
 
     # Maximum charging rate plus contribution to regulation down must be less than available storage capacity
+    # SAILING_MODIFY, add imports/exports?
     @constraint(EP,
         [y in STOR_REG, t in 1:T],
         efficiency_up(gen[y]) *
@@ -269,6 +274,7 @@ function storage_all_operational_reserves!(EP::Model, inputs::Dict, setup::Dict)
     # this constraint is set in functions below for each storage type
 
     expr = extract_time_series_to_expression(vP, STOR_ALL)
+    # SAILING_MODIFY ADD imports, exports?
     add_similar_to_expression!(expr[STOR_REG, :], vREG_discharge[STOR_REG, :])
     add_similar_to_expression!(expr[STOR_RSV, :], vRSV_discharge[STOR_RSV, :])
     if CapacityReserveMargin
@@ -276,6 +282,7 @@ function storage_all_operational_reserves!(EP::Model, inputs::Dict, setup::Dict)
         add_similar_to_expression!(expr[STOR_ALL, :], vCAPRES_discharge[STOR_ALL, :])
     end
     # Maximum discharging rate and contribution to reserves up must be less than power rating
+    # SAILING_MODIFY
     @constraint(EP, [y in STOR_ALL, t in 1:T], expr[y, t]<=eTotalCap[y])
     # Maximum discharging rate and contribution to reserves up must be less than available stored energy in prior period
     @constraint(EP,

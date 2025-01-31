@@ -789,6 +789,9 @@ function asymmetric_storage(rs::Vector{T}) where {T <: AbstractResource}
     findall(r -> isa(r, Storage) && r.model == 2, rs)
 end
 
+# Paired resources
+paired_resource(r::AbstractResource) = get(r, :paired_resource, "None")
+
 # HYDRO interface
 """
     hydro(rs::Vector{T}) where T <: AbstractResource

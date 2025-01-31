@@ -145,4 +145,9 @@ function investment_energy!(EP::Model, inputs::Dict, setup::Dict)
     @constraint(EP,
         cMaxCapEnergyDuration[y in STOR_ALL],
         eTotalCapEnergy[y]<=max_duration(gen[y]) * eTotalCap[y])
+
+    # pairswise capacity resources
+    if may_have_pairwise_capacity_links(gen)
+        link_capacities!(gen)
+    end
 end
